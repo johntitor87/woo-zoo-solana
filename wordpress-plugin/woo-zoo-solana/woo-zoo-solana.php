@@ -239,13 +239,13 @@ function zoo_init_gateway_class() {
     }
 }
 
-// -------------------- Restore Old Header Connect Wallet Button --------------------
+// -------------------- Old ZOO Solana Connect Wallet tab (gradient pill, fixed top-right) --------------------
 add_action('wp_head', 'zoo_add_header_wallet_button');
 function zoo_add_header_wallet_button() {
     ?>
-    <div id="zoo-wallet-header" style="position:fixed; top:10px; right:10px; z-index:9999;">
-        <button id="connect-wallet-btn" style="background-color: #007bff; color: white; border-radius: 20px; padding: 10px 20px; font-size: 16px; border: none;">Connect Wallet</button>
-        <span id="zoo-wallet-msg" style="margin-left:8px;"></span>
+    <div id="zoo-wallet-header" style="position:fixed; top:10px; right:10px; z-index:9999; display:inline-flex; align-items:center; gap:0.5rem;">
+        <button id="connect-wallet-btn" type="button" style="display:inline-flex; align-items:center; justify-content:center; padding:0.5rem 1rem; font-size:0.875rem; font-weight:600; line-height:1.25; border-radius:9999px; border:none; cursor:pointer; background:linear-gradient(135deg, #9945ff 0%, #14f195 100%); color:#0d0d0d; box-shadow:0 2px 8px rgba(153,69,255,0.35); white-space:nowrap;">Connect Wallet</button>
+        <span id="zoo-wallet-msg" style="margin-left:4px; font-size:0.875rem;"></span>
     </div>
     <?php
 }
