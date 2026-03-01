@@ -66,6 +66,7 @@ class WC_Gateway_ZOO extends WC_Payment_Gateway {
     }
 
     public function payment_fields() {
+        // Required IDs for zoo-wallet.js: zoo-token-pay-btn, zoo-wallet-msg. Optional in theme: connect-wallet-btn.
         echo '<input type="hidden" name="zoo_tx_signature" id="zoo_tx_signature" value="">';
         echo '<input type="hidden" name="zoo_wallet" id="zoo_wallet" value="">';
         echo '<button type="button" id="zoo-token-pay-btn" class="button alt">Pay with ZOO Token</button>';
