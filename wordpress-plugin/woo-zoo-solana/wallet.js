@@ -25,14 +25,14 @@
 
     function updateUIConnected() {
         if (publicKey) {
-            showMsg(`Connected: ${publicKey}`);
+            showMsg('Connected');
             if (payBtn) payBtn.disabled = false;
 
             const walletInput = document.getElementById('zoo_wallet_address');
             if (walletInput) walletInput.value = publicKey;
 
             const walletDisplay = document.getElementById('zoo-wallet-display');
-            if (walletDisplay) walletDisplay.textContent = `Connected wallet: ${publicKey}`;
+            if (walletDisplay) walletDisplay.textContent = '';
         }
     }
 
