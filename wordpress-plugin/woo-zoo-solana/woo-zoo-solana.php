@@ -250,17 +250,17 @@ function zoo_add_header_wallet_button() {
     <?php
 }
 
-// -------------------- Add Checkout Button & Wallet Display --------------------
-add_action('woocommerce_review_order_before_payment', 'zoo_add_checkout_wallet');
-function zoo_add_checkout_wallet() {
-    ?>
-    <div id="zoo-checkout-wallet" style="margin:20px 0;">
-        <button id="zoo-token-pay-btn" type="button">Pay with ZOO Token</button>
-        <input type="hidden" id="zoo_wallet_address" name="zoo_wallet_address" value="" />
-        <div id="zoo-wallet-display" style="margin-top:10px; font-weight:bold;"></div>
-    </div>
-    <?php
-}
+// -------------------- Add Checkout Button & Wallet Display (commented out) --------------------
+// add_action('woocommerce_review_order_before_payment', 'zoo_add_checkout_wallet');
+// function zoo_add_checkout_wallet() {
+//     ?>
+//     <div id="zoo-checkout-wallet" style="margin:20px 0;">
+//         <button id="zoo-token-pay-btn" type="button">Pay with ZOO Token</button>
+//         <input type="hidden" id="zoo_wallet_address" name="zoo_wallet_address" value="" />
+//         <div id="zoo-wallet-display" style="margin-top:10px; font-weight:bold;"></div>
+//     </div>
+//     <?php
+// }
 
 // -------------------- Save Wallet Address to Order Meta --------------------
 add_action('woocommerce_checkout_update_order_meta', 'zoo_save_wallet_address');

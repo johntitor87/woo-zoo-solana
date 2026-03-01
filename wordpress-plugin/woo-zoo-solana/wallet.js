@@ -2,6 +2,7 @@
     'use strict';
 
     const connectBtn = document.getElementById('connect-wallet-btn');
+    const placeOrderBtn = document.getElementById('place_order');
     const payBtn = document.getElementById('zoo-token-pay-btn');
     const msgSpan = document.getElementById('zoo-wallet-msg');
 
@@ -16,6 +17,11 @@
 
     function isPhantomInstalled() {
         return window.solana && window.solana.isPhantom;
+    }
+
+    function isZooTokenSelected() {
+        const selected = document.querySelector('input[name="payment_method"]:checked');
+        return selected && selected.value === 'zoo_token';
     }
 
     function updateUIConnected() {
@@ -46,6 +52,14 @@
         }
     }
 
+    function handlePlaceOrderClick(e) {
+        if (!isZooTokenSelected()) return;
+        if (!publicKey) {
+            e.preventDefault();
+            showMsg('Please connect your wallet before placing the order.', true);
+        }
+    }
+
     async function autoConnectWallet() {
         if (!isPhantomInstalled()) return;
 
@@ -63,6 +77,8 @@
     }
 
     if (connectBtn) connectBtn.addEventListener('click', connectWallet);
+    if (placeOrderBtn) placeOrderBtn.addEventListener('click', handlePlaceOrderClick, true);
+
     if (payBtn) {
         payBtn.addEventListener('click', (e) => {
             if (!publicKey) {
