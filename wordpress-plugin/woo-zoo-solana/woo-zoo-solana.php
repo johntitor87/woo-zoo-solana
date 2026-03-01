@@ -11,61 +11,58 @@ if (!defined('ABSPATH')) exit;
 // -------------------- Enqueue scripts --------------------
 add_action('wp_enqueue_scripts', 'zoo_enqueue_wallet_scripts');
 function zoo_enqueue_wallet_scripts() {
-    if (!is_admin()) {
-        // Solana web3.js
-        wp_enqueue_script(
-            'solana-web3',
-            'https://cdn.jsdelivr.net/npm/@solana/web3.js@1.73.0/lib/index.iife.min.js',
-            [],
-            '1.73.0',
-            true
-        );
+    if (is_admin()) return;
 
-        // Custom wallet script
-        wp_enqueue_script(
-            'zoo-wallet-js',
-            plugins_url('wallet.js', __FILE__),
-            ['jquery', 'solana-web3'],
-            '1.0',
-            true
-        );
+    wp_enqueue_script(
+        'solana-web3',
+        'https://cdn.jsdelivr.net/npm/@solana/web3.js@1.73.0/lib/index.iife.min.js',
+        [],
+        '1.73.0',
+        true
+    );
 
-        // Localize script on checkout: ensure order_total and order_id are set so "not configured / order total zero" is avoided
-        if (function_exists('is_checkout') && is_checkout()) {
-            $order_total = 0;
-            $order_id = 0;
+    wp_enqueue_script(
+        'zoo-wallet-js',
+        plugins_url('wallet.js', __FILE__),
+        ['jquery', 'solana-web3'],
+        '1.0',
+        true
+    );
 
-            if (WC()->session) {
-                $order_id = WC()->session->get('order_awaiting_payment');
-            }
-            // Order-pay page: get total from the order
-            if (function_exists('is_wc_endpoint_url') && is_wc_endpoint_url('order-pay') && get_query_var('order-pay')) {
-                $pay_order_id = absint(get_query_var('order-pay'));
-                $pay_order = wc_get_order($pay_order_id);
-                if ($pay_order) {
-                    $order_id = $pay_order_id;
-                    $order_total = (float) $pay_order->get_total();
-                }
-            }
-            if ($order_id && $order_total <= 0) {
-                $order = wc_get_order($order_id);
-                if ($order) {
-                    $order_total = (float) $order->get_total();
-                }
-            }
-            if ($order_total <= 0 && WC()->cart) {
-                $order_total = (float) WC()->cart->get_total('edit');
-            }
+    // Localize only on checkout; guard WC() to prevent blank page
+    if (function_exists('is_checkout') && is_checkout() && function_exists('WC') && WC()) {
+        $order_total = 0;
+        $order_id = 0;
 
-            $zoo_settings = get_option('woocommerce_zoo_token_settings', []);
-            $api_endpoint = !empty($zoo_settings['api_endpoint']) ? $zoo_settings['api_endpoint'] : 'https://your-render-api.com/verify-payment';
-
-            wp_localize_script('zoo-wallet-js', 'zoo_ajax', [
-                'order_id'     => $order_id,
-                'order_amount' => $order_total,
-                'api_endpoint' => $api_endpoint,
-            ]);
+        if (WC()->session) {
+            $order_id = WC()->session->get('order_awaiting_payment');
         }
+        if (function_exists('is_wc_endpoint_url') && is_wc_endpoint_url('order-pay') && get_query_var('order-pay')) {
+            $pay_order_id = absint(get_query_var('order-pay'));
+            $pay_order = wc_get_order($pay_order_id);
+            if ($pay_order) {
+                $order_id = $pay_order_id;
+                $order_total = (float) $pay_order->get_total();
+            }
+        }
+        if ($order_id && $order_total <= 0) {
+            $order = wc_get_order($order_id);
+            if ($order) {
+                $order_total = (float) $order->get_total();
+            }
+        }
+        if ($order_total <= 0 && WC()->cart) {
+            $order_total = (float) WC()->cart->get_total('edit');
+        }
+
+        $zoo_settings = get_option('woocommerce_zoo_token_settings', []);
+        $api_endpoint = !empty($zoo_settings['api_endpoint']) ? $zoo_settings['api_endpoint'] : 'https://your-render-api.com/verify-payment';
+
+        wp_localize_script('zoo-wallet-js', 'zoo_ajax', [
+            'order_id'     => $order_id,
+            'order_amount' => $order_total,
+            'api_endpoint' => $api_endpoint,
+        ]);
     }
 }
 
@@ -239,13 +236,14 @@ function zoo_init_gateway_class() {
     }
 }
 
-// -------------------- Old ZOO Solana Connect Wallet tab (gradient pill, fixed top-right) --------------------
+// -------------------- Blue oval Connect Wallet pill (fixed top-right, all pages) --------------------
 add_action('wp_head', 'zoo_add_header_wallet_button');
 function zoo_add_header_wallet_button() {
+    if (is_admin()) return;
     ?>
-    <div id="zoo-wallet-header" style="position:fixed; top:10px; right:10px; z-index:9999; display:inline-flex; align-items:center; gap:0.5rem;">
-        <button id="connect-wallet-btn" type="button" style="display:inline-flex; align-items:center; justify-content:center; padding:0.5rem 1rem; font-size:0.875rem; font-weight:600; line-height:1.25; border-radius:9999px; border:none; cursor:pointer; background:linear-gradient(135deg, #9945ff 0%, #14f195 100%); color:#0d0d0d; box-shadow:0 2px 8px rgba(153,69,255,0.35); white-space:nowrap;">Connect Wallet</button>
-        <span id="zoo-wallet-msg" style="margin-left:4px; font-size:0.875rem;"></span>
+    <div id="zoo-wallet-header" style="position:fixed; top:10px; right:10px; z-index:9999;">
+        <button id="connect-wallet-btn" type="button" style="background-color:#007bff; color:white; border-radius:20px; padding:10px 20px; font-size:16px; border:none; cursor:pointer;">Connect Wallet</button>
+        <span id="zoo-wallet-msg" style="margin-left:8px;"></span>
     </div>
     <?php
 }

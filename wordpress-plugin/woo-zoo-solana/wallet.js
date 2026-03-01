@@ -2,7 +2,6 @@
     'use strict';
 
     const connectBtn = document.getElementById('connect-wallet-btn');
-    const placeOrderBtn = document.getElementById('place_order');
     const payBtn = document.getElementById('zoo-token-pay-btn');
     const msgSpan = document.getElementById('zoo-wallet-msg');
 
@@ -77,7 +76,12 @@
     }
 
     if (connectBtn) connectBtn.addEventListener('click', connectWallet);
-    if (placeOrderBtn) placeOrderBtn.addEventListener('click', handlePlaceOrderClick, true);
+    // Use delegation so Place Order works when button is added/updated by WooCommerce AJAX
+    document.addEventListener('click', function (e) {
+        if (e.target.id === 'place_order' || (e.target.type === 'submit' && e.target.name === 'woocommerce_checkout_place_order')) {
+            handlePlaceOrderClick(e);
+        }
+    }, true);
 
     if (payBtn) {
         payBtn.addEventListener('click', (e) => {
