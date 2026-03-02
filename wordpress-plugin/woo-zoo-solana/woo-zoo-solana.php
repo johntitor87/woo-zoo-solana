@@ -13,6 +13,11 @@ add_action('wp_enqueue_scripts', 'zoo_enqueue_wallet_scripts');
 function zoo_enqueue_wallet_scripts() {
     if (is_admin()) return;
 
+    // Hide other plugins' wallet UI so only our blue Connect Wallet pill shows
+    wp_register_style('woo-zoo-solana-hide-others', false, [], '1.0');
+    wp_enqueue_style('woo-zoo-solana-hide-others');
+    wp_add_inline_style('woo-zoo-solana-hide-others', '#zoo-wallet-connect,.zoo-wallet-nav-item,.zoo-wallet-btn,.zoo-pay-button{display:none!important;}');
+
     wp_enqueue_script(
         'solana-web3',
         'https://cdn.jsdelivr.net/npm/@solana/web3.js@1.73.0/lib/index.iife.min.js',
@@ -134,7 +139,6 @@ function zoo_init_gateway_class() {
         public function payment_fields() {
             ?>
             <div id="zoo-checkout-wallet" style="margin:20px 0;">
-                <button id="zoo-token-pay-btn" type="button">Pay with ZOO Token</button>
                 <input type="hidden" id="zoo_wallet_address" name="zoo_wallet_address" value="" />
                 <div id="zoo-wallet-display" style="margin-top:10px; font-weight:bold;"></div>
                 <div id="zoo-wallet-msg" style="margin-top:5px;"></div>
