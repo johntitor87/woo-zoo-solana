@@ -236,13 +236,13 @@ function zoo_init_gateway_class() {
     }
 }
 
-// -------------------- Blue oval Connect Wallet pill (fixed top-right, all pages) --------------------
-add_action('wp_head', 'zoo_add_header_wallet_button');
-function zoo_add_header_wallet_button() {
+// -------------------- Blue pill Connect Wallet (only this in header) --------------------
+add_action('wp_body_open', 'zoo_add_connect_wallet_button');
+function zoo_add_connect_wallet_button() {
     if (is_admin()) return;
     ?>
     <div id="zoo-wallet-header" style="position:fixed; top:10px; right:10px; z-index:9999;">
-        <button id="connect-wallet-btn" type="button" style="background-color:#007bff; color:white; border-radius:20px; padding:10px 20px; font-size:16px; border:none; cursor:pointer;">Connect Wallet</button>
+        <button id="connect-wallet-btn" type="button" class="zoo-connect-pill" style="background-color:#007bff; color:white; border-radius:20px; padding:10px 20px; font-size:16px; border:none; cursor:pointer;">Connect Wallet</button>
         <span id="zoo-wallet-msg" style="margin-left:8px;"></span>
     </div>
     <?php

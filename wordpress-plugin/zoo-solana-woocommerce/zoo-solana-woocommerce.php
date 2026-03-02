@@ -339,17 +339,18 @@ function zoo_header_wallet_html() {
 }
 
 /**
- * Add Connect Wallet to primary nav menu (header) so it appears in the header on most themes.
+ * Add Connect Wallet to primary nav menu — DISABLED so only Woo ZOO Solana blue pill (right) shows.
+ * To re-enable the left-side menu item, uncomment the add_filter and function below.
  */
-add_filter('wp_nav_menu_items', 'zoo_nav_menu_add_wallet', 10, 2);
-function zoo_nav_menu_add_wallet($items, $args) {
-    $locations = array('primary', 'main', 'header', 'primary-menu', 'menu-primary');
-    if (!isset($args->theme_location) || !in_array($args->theme_location, $locations, true)) {
-        return $items;
-    }
-    $items .= '<li class="menu-item zoo-wallet-nav-item">' . zoo_header_wallet_html() . '</li>';
-    return $items;
-}
+// add_filter('wp_nav_menu_items', 'zoo_nav_menu_add_wallet', 10, 2);
+// function zoo_nav_menu_add_wallet($items, $args) {
+//     $locations = array('primary', 'main', 'header', 'primary-menu', 'menu-primary');
+//     if (!isset($args->theme_location) || !in_array($args->theme_location, $locations, true)) {
+//         return $items;
+//     }
+//     $items .= '<li class="menu-item zoo-wallet-nav-item">' . zoo_header_wallet_html() . '</li>';
+//     return $items;
+// }
 
 /**
  * Theme hook: use in header template with <?php do_action('zoo_solana_wallet_header'); ?>
