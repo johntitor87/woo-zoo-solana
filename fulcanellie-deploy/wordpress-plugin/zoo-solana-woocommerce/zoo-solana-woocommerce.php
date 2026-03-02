@@ -327,11 +327,11 @@ function zoo_header_wallet_html() {
 // }
 
 /**
- * Theme hook: use in header template with <?php do_action('zoo_solana_wallet_header'); ?>
+ * Theme hook — DISABLED so only Woo ZOO Solana blue pill shows in header.
  */
-add_action('zoo_solana_wallet_header', function () {
-    echo zoo_header_wallet_html();
-});
+// add_action('zoo_solana_wallet_header', function () {
+//     echo zoo_header_wallet_html();
+// });
 
 add_action('wp_ajax_zoo_save_wallet', 'zoo_ajax_save_wallet');
 add_action('wp_ajax_nopriv_zoo_save_wallet', 'zoo_ajax_save_wallet');
