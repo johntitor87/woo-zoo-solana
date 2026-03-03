@@ -65,12 +65,15 @@ class WC_Gateway_ZOO extends WC_Payment_Gateway {
         ];
     }
 
+    /**
+     * IMPORTANT:
+     * Do NOT render any buttons here.
+     * Wallet UI is handled in header via JS.
+     */
     public function payment_fields() {
-        // Required IDs for zoo-wallet.js: zoo-token-pay-btn, zoo-wallet-msg. Optional in theme: connect-wallet-btn.
-        echo '<input type="hidden" name="zoo_tx_signature" id="zoo_tx_signature" value="">';
-        echo '<input type="hidden" name="zoo_wallet" id="zoo_wallet" value="">';
-        echo '<button type="button" id="zoo-token-pay-btn" class="button alt">Pay with ZOO Token</button>';
-        echo '<div id="zoo-wallet-msg" style="color:red;margin-top:10px;"></div>';
+        // We no longer render a Pay with ZOO button.
+        // Only store wallet address for order processing.
+        echo '<input type="hidden" id="zoo_wallet_address" name="zoo_wallet_address" value="" />';
     }
 
     public function process_payment($order_id) {
@@ -98,6 +101,7 @@ class WC_Gateway_ZOO extends WC_Payment_Gateway {
                 $body = json_decode(wp_remote_retrieve_body($response), true);
                 if (!empty($body['success'])) {
                     $order->update_meta_data('_zoo_tx_signature', $tx_signature);
+                    $order->update_meta_data('_zoo_tx_hash', $tx_signature);
                     $order->update_meta_data('_zoo_wallet', $wallet);
                     $order->payment_complete();
                     $order->save();
@@ -161,6 +165,7 @@ class WC_Gateway_ZOO extends WC_Payment_Gateway {
         }
 
         $order->update_meta_data('_zoo_tx_signature', $tx_signature);
+        $order->update_meta_data('_zoo_tx_hash', $tx_signature);
         $order->update_meta_data('_zoo_wallet', $wallet);
         $order->payment_complete();
         $order->save();

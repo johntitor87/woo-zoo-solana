@@ -2,188 +2,228 @@
   'use strict';
 
   const connectBtn = document.getElementById('connect-wallet-btn');
+  const pillDot = document.getElementById('zoo-pill-dot');
+  const pillText = document.getElementById('zoo-pill-text');
+  const balanceBadge = document.getElementById('zoo-balance-badge');
+  const gasPreview = document.getElementById('zoo-gas-preview');
+  const txConfirmed = document.getElementById('zoo-tx-confirmed');
   const publicKeyInput = document.getElementById('zoo_wallet_address');
+
   let publicKey = null;
-  let isConnected = false;
+  let network = 'mainnet-beta';
+  let zooBalance = 0;
+  let isTransactionPending = false;
+  let lastBalance = null;
+  let lastGas = null;
 
-  // Aggressive degen colors
-  const COLORS = {
-    disconnected: '#111',
-    connected: '#00ff00',
-    hover: '#39ff14',
-    text: '#00ffcc'
-  };
-
-  // Set initial style
-  function styleBtnDisconnected() {
+  function showTooltip() {
     if (!connectBtn) return;
-    connectBtn.innerHTML = 'CONNECT WALLET <span class="degen-dot"></span>';
-    connectBtn.style.background = COLORS.disconnected;
-    connectBtn.style.color = COLORS.text;
-    connectBtn.style.border = '2px solid ' + COLORS.connected;
-    connectBtn.style.borderRadius = '999px';
-    connectBtn.style.padding = '10px 20px';
-    connectBtn.style.fontWeight = 'bold';
-    connectBtn.style.fontFamily = 'monospace';
-    connectBtn.style.cursor = 'pointer';
-    connectBtn.style.transition = 'all 0.2s ease';
-    isConnected = false;
-    updateDegenNetwork();
+    let tooltip = connectBtn.querySelector('.tooltip');
+    if (!tooltip) {
+      tooltip = document.createElement('div');
+      tooltip.className = 'tooltip';
+      connectBtn.appendChild(tooltip);
+    }
+    tooltip.textContent = publicKey ? `${publicKey} | ${network}` : 'Not connected';
+    tooltip.style.display = 'block';
   }
 
-  function styleBtnConnected() {
+  function hideTooltip() {
     if (!connectBtn) return;
-    connectBtn.innerHTML = 'CONNECTED <span class="degen-dot connected"></span>';
-    connectBtn.style.background = COLORS.connected;
-    connectBtn.style.color = '#000';
-    connectBtn.style.transform = 'scale(1.05)';
-    setTimeout(() => connectBtn.style.transform = 'scale(1)', 150);
-    isConnected = true;
-    updateDegenNetwork();
+    const tooltip = connectBtn.querySelector('.tooltip');
+    if (tooltip) tooltip.style.display = 'none';
   }
 
-  // Dot styles
-  const styleDot = `
-    .degen-dot {
-      display: inline-block;
-      width: 10px;
-      height: 10px;
-      margin-left: 8px;
-      border-radius: 50%;
-      background-color: red;
-      vertical-align: middle;
-      animation: pulse 1s infinite;
-    }
-    .degen-dot.connected { background-color: #00ff00; }
-    @keyframes pulse {
-      0% { transform: scale(1); opacity: 0.7; }
-      50% { transform: scale(1.3); opacity: 1; }
-      100% { transform: scale(1); opacity: 0.7; }
-    }
-  `;
-  const styleEl = document.createElement('style');
-  styleEl.innerHTML = styleDot;
-  document.head.appendChild(styleEl);
-
-  function addNetworkBadge() {
+  function updateUI() {
     if (!connectBtn) return;
-
-    let badge = document.getElementById('degen-network-badge');
-    if (!badge) {
-      badge = document.createElement('span');
-      badge.id = 'degen-network-badge';
-      badge.style.display = 'inline-block';
-      badge.style.marginLeft = '8px';
-      badge.style.padding = '2px 6px';
-      badge.style.borderRadius = '4px';
-      badge.style.fontSize = '10px';
-      badge.style.fontWeight = 'bold';
-      badge.style.fontFamily = 'monospace';
-      badge.style.color = '#fff';
-      badge.style.animation = 'flash 1.5s infinite';
-      connectBtn.appendChild(badge);
-    }
-
-    const Solana = window.solanaWeb3;
-    let network = 'MAINNET';
-    try {
-      if (Solana) {
-        const url = Solana.clusterApiUrl('mainnet-beta');
-        network = url.includes('devnet') ? 'DEVNET' : 'MAINNET';
+    if (!publicKey) {
+      if (pillText) pillText.textContent = 'Connect Wallet';
+      if (pillDot) pillDot.style.backgroundColor = 'transparent';
+      if (balanceBadge) {
+        balanceBadge.style.display = 'none';
+        balanceBadge.textContent = '';
       }
-    } catch (e) {}
-
-    badge.textContent = network;
-
-    if (!document.getElementById('degen-flash-style')) {
-      const flashStyle = document.createElement('style');
-      flashStyle.id = 'degen-flash-style';
-      flashStyle.innerHTML = `
-        @keyframes flash {
-          0% { background: #ff00ff; }
-          25% { background: #00ffff; }
-          50% { background: #39ff14; }
-          75% { background: #ffdd00; }
-          100% { background: #ff00ff; }
-        }
-        #degen-network-badge { animation: flash 1.5s infinite; }
-      `;
-      document.head.appendChild(flashStyle);
-    }
-  }
-
-  function updateDegenNetwork() {
-    addNetworkBadge();
-  }
-
-  async function connectWallet() {
-    if (!window.solana || !window.solana.isPhantom) {
-      alert('Install Phantom to unleash chaos!');
+      if (gasPreview) gasPreview.textContent = '';
+      connectBtn.classList.remove('pending', 'success', 'failed');
       return;
     }
-    try {
-      const resp = await window.solana.connect();
-      publicKey = resp.publicKey.toString();
-      styleBtnConnected();
-      fillHiddenInput();
-    } catch (e) { console.log('Wallet connect rejected'); }
-  }
-
-  function disconnectWallet() {
-    if (!window.solana || !window.solana.isPhantom) return;
-    try { window.solana.disconnect(); } catch (e) {}
-    publicKey = null;
-    styleBtnDisconnected();
-    if (publicKeyInput) publicKeyInput.value = '';
+    if (pillText) pillText.textContent = publicKey.slice(0, 6) + '...' + publicKey.slice(-4);
+    if (pillDot) pillDot.style.backgroundColor = '#0f0';
+    if (balanceBadge) {
+      balanceBadge.style.display = 'inline-block';
+      balanceBadge.textContent = 'ZOO: ' + Number(zooBalance).toFixed(2);
+    }
+    connectBtn.classList.remove('pending', 'success', 'failed');
   }
 
   function fillHiddenInput() {
     if (publicKeyInput && publicKey) publicKeyInput.value = publicKey;
   }
 
-  async function autoConnectWallet() {
-    if (!window.solana || !window.solana.isPhantom) return;
+  async function fetchBalance() {
+    if (!publicKey) return;
+    const ajaxUrl = (window.zoo_ajax && window.zoo_ajax.ajax_url) ? window.zoo_ajax.ajax_url : '/wp-admin/admin-ajax.php';
     try {
-      const resp = await window.solana.connect({ onlyIfTrusted: true });
-      if (resp && resp.publicKey) {
-        publicKey = resp.publicKey.toString();
-        styleBtnConnected();
-        fillHiddenInput();
+      const res = await fetch(ajaxUrl + '?action=wcs_get_zoo_balance&wallet=' + encodeURIComponent(publicKey));
+      const data = await res.json();
+      const balance = (data.data && data.data.balance != null) ? data.data.balance : (data.balance != null ? data.balance : null);
+      if (balance != null) {
+        zooBalance = parseFloat(balance);
+        if (lastBalance !== null && lastBalance != zooBalance && balanceBadge) {
+          balanceBadge.classList.add('pulse');
+          setTimeout(function () { balanceBadge.classList.remove('pulse'); }, 600);
+        }
+        lastBalance = zooBalance;
+        updateUI();
       }
-    } catch (e) { styleBtnDisconnected(); }
+    } catch (err) {
+      console.error(err);
+    }
   }
 
-  // SPL ZOO Payment Function
-  async function sendZooTokens(amount) {
-    if (!publicKey) { alert('Connect your wallet first!'); return; }
-    if (!window.zoo_ajax || !window.zoo_ajax.shop_wallet || !window.zoo_ajax.zoo_mint) {
-      alert('ZOO payment not configured (shop wallet / mint).');
-      return;
+  async function connectWallet() {
+    if (!window.solana || !window.solana.isPhantom) return alert('Install Phantom Wallet');
+    try {
+      const resp = await window.solana.connect({ onlyIfTrusted: false });
+      publicKey = resp.publicKey.toString();
+      fillHiddenInput();
+      updateUI();
+      await fetchBalance();
+    } catch (err) {
+      console.error(err);
     }
-    const Solana = window.solanaWeb3;
-    const connection = new Solana.Connection(
-      Solana.clusterApiUrl('mainnet-beta'),
-      'confirmed'
-    );
+  }
 
+  function disconnectWallet() {
+    if (window.solana && window.solana.disconnect) {
+      try { window.solana.disconnect(); } catch (e) {}
+    }
+    publicKey = null;
+    zooBalance = 0;
+    lastBalance = null;
+    lastGas = null;
+    if (publicKeyInput) publicKeyInput.value = '';
+    updateUI();
+  }
+
+  function setPendingUI() {
+    if (!connectBtn) return;
+    isTransactionPending = true;
+    connectBtn.classList.add('pending');
+    if (pillDot) pillDot.style.backgroundColor = '#0f0';
+    if (pillText) pillText.textContent = 'PENDING...';
+    connectBtn.disabled = true;
+    connectBtn.style.cursor = 'not-allowed';
+  }
+
+  function clearPendingUI() {
+    if (!connectBtn) return;
+    isTransactionPending = false;
+    connectBtn.classList.remove('pending', 'success', 'failed');
+    connectBtn.disabled = false;
+    connectBtn.style.cursor = '';
+    if (gasPreview) gasPreview.textContent = '';
+    if (pillDot) pillDot.style.backgroundColor = publicKey ? '#0f0' : 'transparent';
+    updateUI();
+  }
+
+  async function estimateGas() {
+    if (!gasPreview || !window.solana) return;
+    try {
+      const estimatedFee = await window.solana.request({ method: 'getRecentBlockhash' });
+      const lamports = (estimatedFee && estimatedFee.value && estimatedFee.value.feeCalculator && estimatedFee.value.feeCalculator.lamportsPerSignature) ? estimatedFee.value.feeCalculator.lamportsPerSignature : 5000;
+      const gasSOL = (lamports / 1e9).toFixed(6);
+      if (lastGas !== null && lastGas != gasSOL) {
+        gasPreview.classList.add('pulse');
+        setTimeout(function () { gasPreview.classList.remove('pulse'); }, 600);
+      }
+      lastGas = gasSOL;
+      gasPreview.textContent = 'Gas: ' + gasSOL + ' SOL';
+    } catch (err) {
+      console.error(err);
+      gasPreview.textContent = 'Gas: ~0.000005 SOL';
+    }
+  }
+
+  function showTxConfirmed() {
+    if (!txConfirmed) return;
+    txConfirmed.style.display = 'block';
+    setTimeout(function () { txConfirmed.style.display = 'none'; }, 2000);
+  }
+
+  // When we go into the 'pending' state, we start the neon spark animation.
+  async function payWithZoo(amount, order_id) {
+    if (!window.solana || !publicKey) return alert('Connect Phantom first');
+
+    setPendingUI();
+    await estimateGas();
+
+    try {
+      const transactionSignature = await sendZooTokens(amount);
+
+      if (txConfirmed) {
+        txConfirmed.style.display = 'block';
+        setTimeout(function () { txConfirmed.style.display = 'none'; }, 2000);
+      }
+      connectBtn.classList.remove('pending');
+      connectBtn.classList.add('success');
+
+      var ajaxUrl = (window.zoo_ajax && window.zoo_ajax.ajax_url) ? window.zoo_ajax.ajax_url : '/wp-admin/admin-ajax.php';
+      var verifyRes = await fetch(ajaxUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          action: 'zoo_verify_transaction',
+          order_id: String(order_id),
+          tx_signature: transactionSignature
+        })
+      });
+      var verifyData = await verifyRes.json();
+
+      await fetchBalance();
+      return verifyData;
+    } catch (err) {
+      console.error(err);
+      connectBtn.classList.remove('pending');
+      connectBtn.classList.add('failed');
+      if (pillDot) pillDot.style.backgroundColor = 'red';
+      setTimeout(function () { if (connectBtn) connectBtn.classList.remove('failed'); }, 1000);
+      throw err;
+    }
+  }
+
+  // --- Check ZOO balance before payment ---
+  async function checkZooBalance(requiredAmount) {
+    if (!publicKey) return false;
+    await fetchBalance();
+    return zooBalance >= parseFloat(requiredAmount);
+  }
+
+  // --- SPL ZOO Transfer ---
+  async function sendZooTokens(amount) {
+    if (!publicKey) { alert('Connect wallet first'); return; }
+    if (!window.zoo_ajax || !window.zoo_ajax.shop_wallet || !window.zoo_ajax.zoo_mint) { alert('ZOO config missing'); return; }
+
+    const Solana = window.solanaWeb3;
+    if (!Solana) { alert('Solana Web3 not loaded'); return; }
+
+    const connection = new Solana.Connection(Solana.clusterApiUrl('mainnet-beta'), 'confirmed');
     const fromPubKey = new Solana.PublicKey(publicKey);
     const toPubKey = new Solana.PublicKey(window.zoo_ajax.shop_wallet);
     const zooMint = new Solana.PublicKey(window.zoo_ajax.zoo_mint);
 
     const fromAccounts = await connection.getTokenAccountsByOwner(fromPubKey, { mint: zooMint });
-    if (!fromAccounts.value.length) throw new Error('No ZOO token account.');
+    if (!fromAccounts.value.length) throw new Error('No ZOO token account');
 
     const toAccounts = await connection.getTokenAccountsByOwner(toPubKey, { mint: zooMint });
-    if (!toAccounts.value.length) throw new Error('Recipient token account missing.');
+    if (!toAccounts.value.length) throw new Error('Recipient token account missing');
 
     const fromToken = fromAccounts.value[0].pubkey;
     const toToken = toAccounts.value[0].pubkey;
-
-    const decimals = window.zoo_ajax.decimals != null ? Number(window.zoo_ajax.decimals) : 9;
+    const decimals = window.zoo_ajax.decimals != null ? window.zoo_ajax.decimals : 9;
     const rawAmount = Math.floor(amount * Math.pow(10, decimals));
     const TOKEN_PROGRAM_ID = new Solana.PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
 
-    // SPL Token Transfer instruction: index 3 + 8-byte amount (little-endian)
     const data = new Uint8Array(9);
     data[0] = 3;
     new DataView(data.buffer).setBigUint64(1, BigInt(rawAmount), true);
@@ -192,67 +232,103 @@
       keys: [
         { pubkey: fromToken, isSigner: false, isWritable: true },
         { pubkey: toToken, isSigner: false, isWritable: true },
-        { pubkey: fromPubKey, isSigner: true, isWritable: false },
+        { pubkey: fromPubKey, isSigner: true, isWritable: false }
       ],
       programId: TOKEN_PROGRAM_ID,
-      data: data,
+      data: data
     });
 
     const tx = new Solana.Transaction().add(transferIx);
     tx.feePayer = fromPubKey;
-    tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
 
     const signed = await window.solana.signAndSendTransaction(tx);
-    await connection.confirmTransaction(signed.signature);
     return signed.signature;
   }
 
-  // Intercept Place Order for ZOO
+  // --- Intercept Place Order ---
   document.addEventListener('click', async (e) => {
     const placeOrderBtn = document.getElementById('place_order');
     if (!placeOrderBtn || e.target !== placeOrderBtn) return;
-
     const selected = document.querySelector('input[name="payment_method"]:checked');
     if (!selected || selected.value !== 'zoo_token') return;
 
     e.preventDefault();
-    if (!publicKey) {
-      alert('Please connect your wallet first.');
+    if (!publicKey) { alert('Please connect your wallet first.'); return; }
+    const orderTotalEl = document.querySelector('.order-total .amount');
+    const cartTotal = orderTotalEl
+      ? parseFloat(orderTotalEl.innerText.replace('$', '').replace(/,/g, '')) || 0
+      : parseFloat(window.zoo_ajax && window.zoo_ajax.order_amount ? window.zoo_ajax.order_amount : 0);
+    if (!cartTotal || cartTotal <= 0) { alert('Invalid order amount.'); return; }
+
+    const hasEnough = await checkZooBalance(cartTotal);
+    if (!hasEnough) {
+      alert('Insufficient ZOO balance.');
       return;
     }
+
     try {
-      const amount = parseFloat(window.zoo_ajax.order_amount || 0);
-      if (!amount || amount <= 0) {
-        alert('Invalid order amount.');
+      var ajaxUrl = (window.zoo_ajax && window.zoo_ajax.ajax_url) ? window.zoo_ajax.ajax_url : '/wp-admin/admin-ajax.php';
+      var nonce = (window.zoo_ajax && window.zoo_ajax.create_order_nonce) ? window.zoo_ajax.create_order_nonce : '';
+
+      var createRes = await fetch(ajaxUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          action: 'zoo_create_pending_order',
+          nonce: nonce,
+          zoo_wallet_address: publicKey || ''
+        })
+      });
+      var createData = await createRes.json();
+      if (!createData.success || !createData.data || !createData.data.order_id) {
+        alert((createData.data && createData.data.message) ? createData.data.message : 'Could not create order.');
         return;
       }
-      const signature = await sendZooTokens(amount);
+      var orderId = createData.data.order_id;
+      var redirectUrl = (createData.data.redirect_url) ? createData.data.redirect_url : '';
 
-      const sigInput = document.createElement('input');
-      sigInput.type = 'hidden';
-      sigInput.name = 'zoo_tx_signature';
-      sigInput.value = signature;
-      document.querySelector('form.checkout').appendChild(sigInput);
+      var verifyData = await payWithZoo(cartTotal, orderId);
+      clearPendingUI();
 
-      document.querySelector('form.checkout').submit();
+      if (!verifyData.success) {
+        alert((verifyData.data && verifyData.data.message) ? verifyData.data.message : 'Verification failed. Contact support.');
+        return;
+      }
+
+      window.location.href = (verifyData.data && verifyData.data.redirect_url) ? verifyData.data.redirect_url : redirectUrl || window.location.href;
     } catch (err) {
+      clearPendingUI();
       alert('Transaction failed or cancelled!');
     }
   });
 
-  // Connect/Disconnect toggle
   if (connectBtn) {
-    connectBtn.addEventListener('click', () => {
-      if (!isConnected) connectWallet();
-      else disconnectWallet();
+    connectBtn.addEventListener('click', function () {
+      if (isTransactionPending) return;
+      if (publicKey) disconnectWallet(); else connectWallet();
     });
+    connectBtn.addEventListener('mouseenter', showTooltip);
+    connectBtn.addEventListener('mouseleave', hideTooltip);
   }
 
-  window.addEventListener('load', () => {
+  setInterval(fetchBalance, 15000);
+
+  window.addEventListener('load', function () {
     if (window.solana && window.solana.isPhantom) {
-      autoConnectWallet();
+      window.solana.connect({ onlyIfTrusted: true }).then(function (resp) {
+        if (resp && resp.publicKey) {
+          publicKey = resp.publicKey.toString();
+          fillHiddenInput();
+          updateUI();
+          fetchBalance();
+        } else {
+          updateUI();
+        }
+      }).catch(function () {
+        updateUI();
+      });
     } else {
-      styleBtnDisconnected();
+      updateUI();
     }
   });
 })();
