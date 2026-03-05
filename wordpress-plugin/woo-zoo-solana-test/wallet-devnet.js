@@ -33,16 +33,18 @@
     }
   }
 
-  async function getZooBalance(walletAddress) {
-    var Solana = window.solanaWeb3;
-    if (!Solana) return 0;
-    var connection = new Solana.Connection('https://api.devnet.solana.com', 'confirmed');
-    var mint = new Solana.PublicKey('FKkgeZxYLxoZ1WciErXKbeNTf5CB296zv51euCR7MZN3');
-    var owner = new Solana.PublicKey(walletAddress);
-    var accounts = await connection.getParsedTokenAccountsByOwner(owner, { mint: mint });
-    if (!accounts.value.length) return 0;
-    var balance = accounts.value[0].account.data.parsed.info.tokenAmount.uiAmount;
-    return balance;
+  async function updateBalanceBadge() {
+    var solanaWeb3 = window.solanaWeb3;
+    if (!solanaWeb3 || !publicKey) return;
+    var connection = new solanaWeb3.Connection(solanaWeb3.clusterApiUrl('devnet'), 'confirmed');
+    var owner = new solanaWeb3.PublicKey(publicKey);
+    var mint = new solanaWeb3.PublicKey('FKkgeZxYLxoZ1WciErXKbeNTf5CB296zv51euCR7MZN3');
+    var tokenAccounts = await connection.getParsedTokenAccountsByOwner(owner, { mint: mint });
+    var balance = tokenAccounts.value.length
+      ? tokenAccounts.value[0].account.data.parsed.info.tokenAmount.uiAmount
+      : 0;
+    var badge = document.getElementById('zoo-balance-badge');
+    if (badge) badge.innerText = `${(balance != null ? balance : 0).toFixed(2)} ZOO`;
   }
 
   async function connectWallet() {
@@ -54,9 +56,7 @@
       var resp = await window.solana.connect();
       publicKey = resp.publicKey.toString();
       updateUIConnected();
-      var balance = await getZooBalance(publicKey);
-      var badge = document.getElementById('zoo-balance-badge');
-      if (badge) badge.innerText = (balance != null ? balance : 0).toFixed(2) + ' ZOO';
+      await updateBalanceBadge();
     } catch (e) {
       showMsg('Wallet connection rejected.', true);
     }
@@ -69,9 +69,7 @@
       if (resp && resp.publicKey) {
         publicKey = resp.publicKey.toString();
         updateUIConnected();
-        var balance = await getZooBalance(publicKey);
-        var badge = document.getElementById('zoo-balance-badge');
-        if (badge) badge.innerText = (balance != null ? balance : 0).toFixed(2) + ' ZOO';
+        await updateBalanceBadge();
       } else {
         showMsg('Ready to connect.', false);
       }
@@ -85,7 +83,7 @@
     var solanaWeb3 = window.solanaWeb3;
     if (!solanaWeb3) throw new Error('Solana Web3 not loaded');
 
-    var connection = new solanaWeb3.Connection(DEVNET_RPC, 'confirmed');
+    var connection = new solanaWeb3.Connection(solanaWeb3.clusterApiUrl('devnet'), 'confirmed');
     var fromPubKey = new solanaWeb3.PublicKey(publicKey);
     var toPubKey = new solanaWeb3.PublicKey(SHOP_WALLET);
     var mintPubKey = new solanaWeb3.PublicKey(ZOO_MINT);

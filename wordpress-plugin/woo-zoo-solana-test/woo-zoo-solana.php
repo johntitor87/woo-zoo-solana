@@ -145,7 +145,7 @@ add_action('plugins_loaded', function () {
         public function process_payment($order_id) {
             return [
                 'result'   => 'success',
-                'redirect' => ''
+                'redirect' => '' // JS handles the redirect after tx
             ];
         }
     }
