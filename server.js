@@ -1,7 +1,8 @@
 // server.js - Woo ZOO Token Verification (Free RPC + Auto-Poll)
 const express = require('express');
 const cors = require('cors');
-const { Connection, clusterApiUrl } = require('@solana/web3.js');
+const { Connection, clusterApiUrl, PublicKey } = require('@solana/web3.js');
+const { getAssociatedTokenAddressSync } = require('@solana/spl-token');
 const winston = require('winston');
 const rateLimit = require('express-rate-limit');
 const cron = require('node-cron');
@@ -40,8 +41,43 @@ const limiter = rateLimit({
 });
 app.use('/verify-zoo-payment', limiter);
 
-// ------------------ FREE RPC CONNECTION ------------------
+// ------------------ RPC CONNECTIONS ------------------
 const connection = new Connection(clusterApiUrl('mainnet-beta'), 'finalized');
+const devnetConnection = new Connection('https://api.devnet.solana.com', 'confirmed');
+
+app.use('/verify-devnet-payment', limiter);
+
+// ------------------ VERIFY DEVNET PAYMENT ------------------
+app.post('/verify-devnet-payment', async (req, res) => {
+  try {
+    const { txSignature } = req.body;
+    if (!txSignature) {
+      return res.json({ success: false, error: 'Missing txSignature' });
+    }
+
+    const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
+    const tx = await connection.getTransaction(txSignature, {
+      commitment: 'confirmed'
+    });
+
+    if (!tx) {
+      return res.json({
+        success: false,
+        error: 'Transaction not found'
+      });
+    }
+
+    return res.json({
+      success: true
+    });
+  } catch (err) {
+    console.error(err);
+    return res.json({
+      success: false,
+      error: 'Verification failed'
+    });
+  }
+});
 
 // ------------------ HEALTH CHECK ------------------
 app.get('/health', (req, res) => res.json({ status: 'ok' }));

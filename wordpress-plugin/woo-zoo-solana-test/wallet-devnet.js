@@ -1,13 +1,15 @@
 (function () {
   'use strict';
 
+  // Devnet config (Network: https://api.devnet.solana.com)
+  var DEVNET_RPC = 'https://api.devnet.solana.com';
+  var ZOO_MINT = 'FKkgeZxYLxoZ1WciErXKbeNTf5CB296zv51euCR7MZN3';   // ZOO_MINT_ADDRESS
+  var SHOP_WALLET = 'AVJqhvECgwFkMQbmmTinbf4DxPco6fhzWEpzWyGi53xa'; // devnet token account
+  var VERIFY_URL = 'https://woo-solana-payment-devnet.onrender.com/verify-devnet-payment';
+
   var connectBtn = document.getElementById('connect-wallet-btn');
   var msgSpan = document.getElementById('zoo-wallet-msg') || document.getElementById('zoo-header-wallet-msg');
   var publicKey = null;
-
-  var SHOP_WALLET = 'AVJqhvECgwFkMQbmmTinbf4DxPco6fhzWEpzWyGi53xa';
-  var ZOO_MINT = 'FKkgeZxYLxoZ1WciErXKbeNTf5CB296zv51euCR7MZN3';
-  var VERIFY_URL = 'https://zoo-solana-checkout-api-1.onrender.com/verify-devnet-payment';
 
   function getZooAjax() {
     return window.zoo_ajax || {};
@@ -65,7 +67,7 @@
     var solanaWeb3 = window.solanaWeb3;
     if (!solanaWeb3) throw new Error('Solana Web3 not loaded');
 
-    var connection = new solanaWeb3.Connection(solanaWeb3.clusterApiUrl('devnet'), 'confirmed');
+    var connection = new solanaWeb3.Connection(DEVNET_RPC, 'confirmed');
     var fromPubKey = new solanaWeb3.PublicKey(publicKey);
     var toPubKey = new solanaWeb3.PublicKey(SHOP_WALLET);
     var mintPubKey = new solanaWeb3.PublicKey(ZOO_MINT);
@@ -132,6 +134,7 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          txSignature: txSignature,
           signature: txSignature,
           expectedAmount: amount,
           shopWallet: SHOP_WALLET,

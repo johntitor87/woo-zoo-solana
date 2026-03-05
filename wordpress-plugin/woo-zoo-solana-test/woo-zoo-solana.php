@@ -53,14 +53,11 @@ function zoo_enqueue_wallet_scripts_devnet() {
         if (WC()->session) $order_id = WC()->session->get('order_awaiting_payment');
         if (WC()->cart) $order_total = (float) WC()->cart->get_total('edit');
 
-        $zoo_settings = get_option('woocommerce_zoo_token_settings', []);
-        $api_endpoint = !empty($zoo_settings['api_endpoint']) ? $zoo_settings['api_endpoint'] : 'https://your-render-api.com/verify-payment';
-
         wp_localize_script('zoo-wallet-js-devnet', 'zoo_ajax', [
             'order_id' => $order_id,
             'order_amount' => $order_total,
-            'api_endpoint' => $api_endpoint,
-            'shop_wallet' => '6XPtpWPgFfoxRcLCwxTKXawrvzeYjviw4EYpSSLW42gc',
+            'api_endpoint' => 'https://woo-solana-payment-devnet.onrender.com/verify-devnet-payment',
+            'shop_wallet' => 'AVJqhvECgwFkMQbmmTinbf4DxPco6fhzWEpzWyGi53xa',
             'rpc_url' => 'https://api.devnet.solana.com',
             'zoo_mint' => 'FKkgeZxYLxoZ1WciErXKbeNTf5CB296zv51euCR7MZN3',
             'ajax_url' => admin_url('admin-ajax.php'),
@@ -71,8 +68,8 @@ function zoo_enqueue_wallet_scripts_devnet() {
         wp_localize_script('zoo-wallet-js-devnet', 'zoo_ajax', [
             'order_id' => 0,
             'order_amount' => 0,
-            'api_endpoint' => '',
-            'shop_wallet' => '6XPtpWPgFfoxRcLCwxTKXawrvzeYjviw4EYpSSLW42gc',
+            'api_endpoint' => 'https://woo-solana-payment-devnet.onrender.com/verify-devnet-payment',
+            'shop_wallet' => 'AVJqhvECgwFkMQbmmTinbf4DxPco6fhzWEpzWyGi53xa',
             'rpc_url' => 'https://api.devnet.solana.com',
             'zoo_mint' => 'FKkgeZxYLxoZ1WciErXKbeNTf5CB296zv51euCR7MZN3',
             'ajax_url' => admin_url('admin-ajax.php'),
