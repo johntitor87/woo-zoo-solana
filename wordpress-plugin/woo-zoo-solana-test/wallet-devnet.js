@@ -33,6 +33,18 @@
     }
   }
 
+  async function getZooBalance(walletAddress) {
+    var Solana = window.solanaWeb3;
+    if (!Solana) return 0;
+    var connection = new Solana.Connection('https://api.devnet.solana.com', 'confirmed');
+    var mint = new Solana.PublicKey('FKkgeZxYLxoZ1WciErXKbeNTf5CB296zv51euCR7MZN3');
+    var owner = new Solana.PublicKey(walletAddress);
+    var accounts = await connection.getParsedTokenAccountsByOwner(owner, { mint: mint });
+    if (!accounts.value.length) return 0;
+    var balance = accounts.value[0].account.data.parsed.info.tokenAmount.uiAmount;
+    return balance;
+  }
+
   async function connectWallet() {
     if (!isPhantomInstalled()) {
       showMsg('Phantom Wallet not installed.', true);
@@ -42,6 +54,9 @@
       var resp = await window.solana.connect();
       publicKey = resp.publicKey.toString();
       updateUIConnected();
+      var balance = await getZooBalance(publicKey);
+      var badge = document.getElementById('zoo-balance-badge');
+      if (badge) badge.innerText = (balance != null ? balance : 0).toFixed(2) + ' ZOO';
     } catch (e) {
       showMsg('Wallet connection rejected.', true);
     }
@@ -54,6 +69,9 @@
       if (resp && resp.publicKey) {
         publicKey = resp.publicKey.toString();
         updateUIConnected();
+        var balance = await getZooBalance(publicKey);
+        var badge = document.getElementById('zoo-balance-badge');
+        if (badge) badge.innerText = (balance != null ? balance : 0).toFixed(2) + ' ZOO';
       } else {
         showMsg('Ready to connect.', false);
       }
@@ -104,31 +122,27 @@
     return sendZooPayment(amount);
   };
 
-  async function checkoutWithZoo() {
+  async function payWithZoo() {
     if (!publicKey) {
       showMsg('Connect your wallet first.', true);
       return false;
     }
-
     var $ = window.jQuery;
     if (!$) return false;
-
     var ajax = getZooAjax();
     var amount = parseFloat($('#order_review .order-total .amount').last().text().replace(/[^0-9.-]+/g, '')) || parseFloat(ajax.order_amount) || 0;
-
     if (!amount || amount <= 0) {
       showMsg('Invalid order amount.', true);
       return false;
     }
-
     showMsg('Processing TX...', false);
     if (connectBtn) {
       connectBtn.classList.add('pending');
       connectBtn.classList.remove('failed', 'success');
     }
-
     try {
-      var txSignature = await sendZooPayment(amount);
+      // 1) Phantom popup – sign & send transaction
+      var txSignature = await window.sendZooTokens(publicKey, amount);
 
       var verifyResp = await fetch(VERIFY_URL, {
         method: 'POST',
@@ -172,7 +186,22 @@
     return true;
   }
 
+  function checkoutWithZoo() {
+    return payWithZoo();
+  }
+
   if (connectBtn) connectBtn.addEventListener('click', connectWallet);
+
+  var payBtn = document.getElementById('place_order');
+  if (payBtn) {
+    payBtn.addEventListener('click', function (e) {
+      var $ = window.jQuery;
+      if ($ && $('input[name="payment_method"]:checked').val() === 'zoo_devnet') {
+        e.preventDefault();
+        payWithZoo();
+      }
+    });
+  }
 
   jQuery(function ($) {
     $('form.checkout').on('submit', function (e) {
@@ -180,7 +209,7 @@
       if (selectedMethod !== 'zoo_devnet') return true;
 
       e.preventDefault();
-      checkoutWithZoo();
+      payWithZoo();
       return false;
     });
   });

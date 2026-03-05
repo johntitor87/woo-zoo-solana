@@ -111,7 +111,7 @@ add_action('plugins_loaded', function () {
             $this->id = 'zoo_devnet';
             $this->method_title = 'ZOO Token (Devnet)';
             $this->method_description = 'Pay with ZOO Token on Solana Devnet.';
-            $this->has_fields = false;
+            $this->has_fields = true;
 
             $this->init_form_fields();
             $this->init_settings();
@@ -144,7 +144,8 @@ add_action('plugins_loaded', function () {
 
         public function process_payment($order_id) {
             return [
-                'result' => 'success'
+                'result'   => 'success',
+                'redirect' => ''
             ];
         }
     }
