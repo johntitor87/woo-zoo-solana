@@ -10,21 +10,28 @@ if (!defined('ABSPATH')) exit;
 
 // -------------------- Enqueue Scripts --------------------
 add_action('wp_enqueue_scripts', function () {
+
     if (is_admin()) return;
+
+    // Solana Web3
     wp_enqueue_script(
         'solana-web3',
         'https://unpkg.com/@solana/web3.js@latest/lib/index.iife.js',
         [],
-        'latest',
+        null,
         true
     );
+
+    // SPL Token Library
     wp_enqueue_script(
         'solana-spl-token',
         'https://unpkg.com/@solana/spl-token@latest/lib/index.iife.js',
         ['solana-web3'],
-        'latest',
+        null,
         true
     );
+
+    // QR Code Generator
     wp_enqueue_script(
         'qrcodejs',
         'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js',
@@ -32,14 +39,17 @@ add_action('wp_enqueue_scripts', function () {
         '1.0.0',
         true
     );
+
+    // ZOO Wallet Script
     wp_enqueue_script(
-        'zoo-wallet-js-devnet',
+        'zoo-wallet-devnet',
         plugin_dir_url(__FILE__) . 'wallet-devnet.js',
-        ['jquery', 'solana-web3', 'solana-spl-token', 'qrcodejs'],
-        time(),
+        ['solana-web3','solana-spl-token'],
+        '1.0',
         true
     );
-}, 5);
+
+}, 10);
 
 add_action('wp_enqueue_scripts', 'zoo_enqueue_wallet_scripts_devnet');
 function zoo_enqueue_wallet_scripts_devnet() {
@@ -75,7 +85,7 @@ function zoo_enqueue_wallet_scripts_devnet() {
             $order_received_url = $order ? $order->get_checkout_order_received_url() : '';
         }
 
-        wp_localize_script('zoo-wallet-js-devnet', 'zoo_ajax', [
+        wp_localize_script('zoo-wallet-devnet', 'zoo_ajax', [
             'order_id' => $order_id,
             'order_amount' => $order_total,
             'order_received_url' => $order_received_url,
@@ -88,7 +98,7 @@ function zoo_enqueue_wallet_scripts_devnet() {
             'decimals' => 9,
         ]);
     } else {
-        wp_localize_script('zoo-wallet-js-devnet', 'zoo_ajax', [
+        wp_localize_script('zoo-wallet-devnet', 'zoo_ajax', [
             'order_id' => 0,
             'order_amount' => 0,
             'order_received_url' => '',
@@ -202,6 +212,18 @@ function zoo_devnet_ajax_confirm_payment() {
     wp_send_json_success(['redirect' => $order->get_checkout_order_received_url()]);
 }
 
+// Step 6 — Store transaction in WooCommerce order meta
+add_action('woocommerce_checkout_update_order_meta', function ($order_id) {
+    if (!empty($_POST['zoo_tx_hash'])) {
+        $order = wc_get_order($order_id);
+        if ($order) {
+            $order->update_meta_data('_zoo_tx_hash', sanitize_text_field(wp_unslash($_POST['zoo_tx_hash'])));
+            $order->update_meta_data('_zoo_tx_signature', sanitize_text_field(wp_unslash($_POST['zoo_tx_hash'])));
+            $order->save();
+        }
+    }
+});
+
 // -------------------- Blue Degen Wallet Pill --------------------
 add_action('wp_body_open', 'zoo_add_connect_wallet_button_devnet');
 function zoo_add_connect_wallet_button_devnet() {
@@ -265,10 +287,25 @@ add_action('plugins_loaded', function () {
             ];
         }
 
+        public function payment_fields() {
+            echo '<input type="hidden" id="zoo_tx_hash" name="zoo_tx_hash" value="" />';
+        }
+
         public function process_payment($order_id) {
+            $tx = isset($_POST['zoo_tx_hash']) ? sanitize_text_field(wp_unslash($_POST['zoo_tx_hash'])) : '';
+            if (!empty($tx)) {
+                $order = wc_get_order($order_id);
+                if ($order) {
+                    $order->update_meta_data('_zoo_tx_signature', $tx);
+                    $order->update_meta_data('_zoo_tx_hash', $tx);
+                    $order->save();
+                }
+            }
+            $order = wc_get_order($order_id);
+            $redirect = $order ? $order->get_checkout_order_received_url() : wc_get_checkout_url();
             return [
                 'result'   => 'success',
-                'redirect' => '' // JS handles the redirect after tx
+                'redirect' => $redirect
             ];
         }
     }
