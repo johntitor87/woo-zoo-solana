@@ -9,6 +9,7 @@
 if (!defined('ABSPATH')) exit;
 
 // -------------------- Enqueue Scripts --------------------
+// Order guarantees: solana-web3 → solana-spl-token → zoo-wallet-devnet (wallet waits for both libraries).
 add_action('wp_enqueue_scripts', function () {
 
     if (is_admin()) return;

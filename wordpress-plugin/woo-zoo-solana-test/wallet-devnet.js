@@ -1,228 +1,253 @@
-console.log("ZOO DEVNET WALLET LOADED");
+console.log('ZOO DEVNET WALLET JS LOADED');
 
 (function () {
-  let zooWallet = null;
+  'use strict';
 
-  const ZOO_TOKEN_MINT = new solanaWeb3.PublicKey(
-    "FKkgeZxYLxoZ1WciErXKbeNTf5CB296zv51euCR7MZN3"
-  );
-  const STORE_WALLET = new solanaWeb3.PublicKey(
-    "6XPtpWPgFfoxRcLCwxTKXawrvzeYjviw4EYpSSLW42gc"
-  );
-  const VERIFY_URL = "https://woo-solana-payment-devnet.onrender.com/verify-zoo-payment";
+  const splToken = window.splToken;
+  if (!splToken) {
+    console.error('SPL Token library not loaded');
+  }
 
-  const connectBtn = document.getElementById("connect-wallet-btn");
-  const balanceBadge = document.getElementById("zoo-balance-badge");
+  // Devnet config (Network: https://api.devnet.solana.com)
+  const DEVNET_RPC = 'https://api.devnet.solana.com';
+  const ZOO_MINT = 'FKkgeZxYLxoZ1WciErXKbeNTf5CB296zv51euCR7MZN3';
+  const SHOP_WALLET = '6XPtpWPgFfoxRcLCwxTKXawrvzeYjviw4EYpSSLW42gc';
+  const VERIFY_URL = 'https://woo-solana-payment-devnet.onrender.com/verify-zoo-payment';
 
-  // Step 1 — Store wallet connection globally
+  const connectBtn = document.getElementById('connect-wallet-btn');
+  const msgSpan = document.getElementById('zoo-wallet-msg') || document.getElementById('zoo-header-wallet-msg');
+  let publicKey = null;
+
+  function getZooAjax() {
+    return window.zoo_ajax || {};
+  }
+
+  function showMsg(message, isError) {
+    if (msgSpan) {
+      msgSpan.textContent = message || '';
+      msgSpan.style.color = isError ? 'red' : 'lime';
+    }
+  }
+
+  function isPhantomInstalled() {
+    return window.solana && window.solana.isPhantom;
+  }
+
+  function updateUIConnected() {
+    if (publicKey) {
+      showMsg('Wallet Connected', false);
+      if (connectBtn) connectBtn.textContent = 'Connected';
+    }
+  }
+
+  async function fetchZooBalance(wallet) {
+    const solanaWeb3 = window.solanaWeb3;
+    if (!solanaWeb3) return;
+    const connection = new solanaWeb3.Connection(solanaWeb3.clusterApiUrl('devnet'), 'confirmed');
+    const mint = new solanaWeb3.PublicKey(ZOO_MINT);
+    const owner = new solanaWeb3.PublicKey(wallet);
+    const accounts = await connection.getParsedTokenAccountsByOwner(owner, { mint: mint });
+    let balance = 0;
+    if (accounts.value.length) {
+      balance = accounts.value[0].account.data.parsed.info.tokenAmount.uiAmount;
+    }
+    const badge = document.querySelector('#zoo-balance-badge');
+    if (badge) badge.innerText = (balance != null ? balance : 0).toFixed(2) + ' ZOO';
+  }
+
+  function updateBalanceBadge() {
+    if (publicKey) return fetchZooBalance(publicKey.toString());
+  }
+
   async function connectWallet() {
-    const provider = window.solana;
-    if (!provider || !provider.isPhantom) {
-      alert("Install Phantom Wallet");
+    if (!isPhantomInstalled()) {
+      showMsg('Phantom Wallet not installed.', true);
       return;
     }
-    const resp = await provider.connect();
-    zooWallet = resp.publicKey.toString();
-    localStorage.setItem("zoo_wallet", zooWallet);
-    const pillText = document.getElementById("zoo-pill-text");
-    if (pillText) pillText.innerText = "🟢 Phantom Connected";
-    console.log("Connected wallet:", zooWallet);
-    getZooBalance(zooWallet);
-  }
-
-  // Step 2 — Auto reconnect wallet
-  async function autoConnect() {
-    const provider = window.solana;
-    if (!provider) return;
     try {
-      const resp = await provider.connect({ onlyIfTrusted: true });
-      zooWallet = resp.publicKey.toString();
-      const pillText = document.getElementById("zoo-pill-text");
-      if (pillText) pillText.innerText = "🟢 Phantom Connected";
-      console.log("Auto connected:", zooWallet);
-      getZooBalance(zooWallet);
+      const resp = await window.solana.connect();
+      publicKey = resp.publicKey.toString();
+      updateUIConnected();
+      await fetchZooBalance(publicKey.toString());
     } catch (e) {
-      console.log("Wallet not trusted yet");
+      showMsg('Wallet connection rejected.', true);
     }
   }
 
-  document.addEventListener("DOMContentLoaded", autoConnect);
-
-  document.addEventListener("DOMContentLoaded", function () {
-    if (connectBtn) connectBtn.addEventListener("click", connectWallet);
-  });
-
-  async function getZooBalance(wallet) {
-    if (!wallet) return;
-    const connection = new solanaWeb3.Connection(
-      solanaWeb3.clusterApiUrl("devnet"),
-      "confirmed"
-    );
-    const walletPubkey = wallet instanceof solanaWeb3.PublicKey ? wallet : new solanaWeb3.PublicKey(wallet);
-
-    const splTokenLib = window.splToken;
-    if (splTokenLib && splTokenLib.getAssociatedTokenAddress) {
-      try {
-        const tokenAccount = await splTokenLib.getAssociatedTokenAddress(
-          ZOO_TOKEN_MINT,
-          walletPubkey
-        );
-        const balance = await connection.getTokenAccountBalance(tokenAccount);
-        const uiAmount = balance.value.uiAmount;
-        if (balanceBadge) {
-          balanceBadge.innerText = (uiAmount != null ? Number(uiAmount).toLocaleString() : "0") + " ZOO";
-        }
-        console.log("ZOO balance:", balance.value.uiAmount);
-      } catch (err) {
-        if (balanceBadge) balanceBadge.innerText = "0 ZOO";
-        console.log("ZOO balance: no token account or error", err.message);
+  async function autoConnectWallet() {
+    if (!isPhantomInstalled()) return;
+    try {
+      const resp = await window.solana.connect({ onlyIfTrusted: true });
+      if (resp && resp.publicKey) {
+        publicKey = resp.publicKey.toString();
+        updateUIConnected();
+        await fetchZooBalance(publicKey.toString());
+      } else {
+        showMsg('Ready to connect.', false);
       }
-    } else {
-      const accounts = await connection.getParsedTokenAccountsByOwner(walletPubkey, { mint: ZOO_TOKEN_MINT });
-      let uiAmount = 0;
-      if (accounts.value.length) {
-        uiAmount = accounts.value[0].account.data.parsed.info.tokenAmount.uiAmount;
-      }
-      if (balanceBadge) balanceBadge.innerText = Number(uiAmount).toLocaleString() + " ZOO";
+    } catch (e) {
+      showMsg('Ready to connect.', false);
     }
-
-    const pillText = document.getElementById("zoo-pill-text");
-    if (pillText) pillText.innerText = "🟢 Phantom Connected";
   }
 
-  // Step 3 — Fetch WooCommerce cart total (for later ZOO amount conversion)
-  async function getCartTotal() {
-    const res = await fetch("/?wc-ajax=get_cart_totals");
-    const data = await res.text();
-    console.log("Cart totals:", data);
-    return data;
-  }
-
-  // ZOO payment (amount = raw, 9 decimals). Uses splToken; Phantom only for zoo_devnet.
   async function sendZooPayment(amount) {
-    const provider = window.solana;
-    if (!provider || !provider.isPhantom) {
-      alert("Phantom wallet not found");
-      throw new Error("Phantom wallet not found");
-    }
+    if (!window.solana) throw new Error('Phantom not found');
+    const solanaWeb3 = window.solanaWeb3;
+    if (!solanaWeb3) throw new Error('Solana Web3 not loaded');
 
-    const connection = new solanaWeb3.Connection(
-      solanaWeb3.clusterApiUrl("devnet"),
-      "confirmed"
-    );
+    const connection = new solanaWeb3.Connection(solanaWeb3.clusterApiUrl('devnet'), 'confirmed');
+    const fromPubKey = new solanaWeb3.PublicKey(publicKey);
+    const toPubKey = new solanaWeb3.PublicKey(SHOP_WALLET);
+    const mintPubKey = new solanaWeb3.PublicKey(ZOO_MINT);
+    const TOKEN_PROGRAM_ID = new solanaWeb3.PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
 
-    const wallet = provider.publicKey;
+    const fromTokens = await connection.getTokenAccountsByOwner(fromPubKey, { mint: mintPubKey });
+    if (!fromTokens.value.length) throw new Error('No ZOO token account in wallet');
 
-    const splToken = window.splToken;
-    if (!splToken || !splToken.getAssociatedTokenAddress || !splToken.createTransferInstruction) {
-      throw new Error("SPL Token library not loaded");
-    }
+    const toTokens = await connection.getTokenAccountsByOwner(toPubKey, { mint: mintPubKey });
+    if (!toTokens.value.length) throw new Error('Recipient token account does not exist');
 
-    const fromTokenAccount = await splToken.getAssociatedTokenAddress(
-      ZOO_TOKEN_MINT,
-      wallet
-    );
+    const rawAmount = Math.floor(amount * Math.pow(10, 9));
+    const data = new Uint8Array(9);
+    data[0] = 3;
+    new DataView(data.buffer).setBigUint64(1, BigInt(rawAmount), true);
 
-    const toTokenAccount = await splToken.getAssociatedTokenAddress(
-      ZOO_TOKEN_MINT,
-      STORE_WALLET
-    );
+    const transferIx = new solanaWeb3.TransactionInstruction({
+      keys: [
+        { pubkey: fromTokens.value[0].pubkey, isSigner: false, isWritable: true },
+        { pubkey: toTokens.value[0].pubkey, isSigner: false, isWritable: true },
+        { pubkey: fromPubKey, isSigner: true, isWritable: false }
+      ],
+      programId: TOKEN_PROGRAM_ID,
+      data: data
+    });
 
-    const instruction = splToken.createTransferInstruction(
-      fromTokenAccount,
-      toTokenAccount,
-      wallet,
-      amount
-    );
+    const tx = new solanaWeb3.Transaction().add(transferIx);
+    const latest = await connection.getLatestBlockhash();
+    tx.recentBlockhash = latest.blockhash;
+    tx.feePayer = fromPubKey;
 
-    const transaction = new solanaWeb3.Transaction().add(instruction);
-
-    transaction.feePayer = wallet;
-
-    const { blockhash } = await connection.getLatestBlockhash();
-
-    transaction.recentBlockhash = blockhash;
-
-    const signed = await provider.signTransaction(transaction);
-
-    const signature = await connection.sendRawTransaction(
-      signed.serialize()
-    );
-
-    await connection.confirmTransaction(signature);
-
-    console.log("ZOO payment confirmed:", signature);
-
-    return signature;
+    const signedTx = await window.solana.signAndSendTransaction(tx);
+    await connection.confirmTransaction(signedTx.signature, 'confirmed');
+    return signedTx.signature;
   }
 
-  // Create order → Pay with Phantom → Verify → Redirect. Phantom only for ZOO (zoo_devnet).
-  document.addEventListener("DOMContentLoaded", function () {
-    const placeOrder = document.getElementById("place_order");
-    if (!placeOrder) return;
+  window.sendZooTokens = function (fromPubkeyStr, amount) {
+    return sendZooPayment(amount);
+  };
 
-    placeOrder.addEventListener("click", async function (e) {
-      const selected = document.querySelector('input[name="payment_method"]:checked');
-      if (!selected || selected.value !== "zoo_devnet") {
-        return; // Credit card / PayPal → normal checkout; ZOO → Phantom
+  async function payWithZoo() {
+    if (!publicKey) {
+      showMsg('Connect your wallet first.', true);
+      return false;
+    }
+    const $ = window.jQuery;
+    if (!$) return false;
+    const ajax = getZooAjax();
+    const amount = parseFloat($('#order_review .order-total .amount').last().text().replace(/[^0-9.-]+/g, '')) || parseFloat(ajax.order_amount) || 0;
+    if (!amount || amount <= 0) {
+      showMsg('Invalid order amount.', true);
+      return false;
+    }
+    showMsg('Processing TX...', false);
+    if (connectBtn) {
+      connectBtn.classList.add('pending');
+      connectBtn.classList.remove('failed', 'success');
+    }
+    try {
+      // 1) Create pending order first (get order_id for verify)
+      const ajaxUrl = ajax.ajax_url || '/wp-admin/admin-ajax.php';
+      const createBody = new URLSearchParams({
+        action: 'zoo_create_pending_order',
+        nonce: ajax.create_order_nonce || '',
+        zoo_wallet_address: publicKey
+      }).toString();
+      const orderResp = await fetch(ajaxUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: createBody
+      });
+      const orderData = await orderResp.json();
+      if (!orderData.success) throw new Error(orderData.data?.message || 'Could not create order');
+      const orderId = (orderData.data && orderData.data.order_id) || orderData.order_id;
+      const redirectUrl = (orderData.data && (orderData.data.redirect_url || orderData.data.redirect)) || '/checkout/order-received/' + orderId + '/';
+      if (!orderId) throw new Error('No order ID returned');
+
+      // 2) Phantom – sign & send transaction
+      const txSignature = await window.sendZooTokens(publicKey, amount);
+
+      // 3) Verify (store pending; cron will confirm on-chain)
+      const verifyResp = await fetch(VERIFY_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          signature: txSignature,
+          order_id: orderId,
+          expectedAmount: amount,
+          network: 'devnet'
+        })
+      });
+      const verifyData = await verifyResp.json();
+      if (!verifyData.success) throw new Error(verifyData.error || 'Verification failed');
+
+      // 4) Redirect
+      window.location.href = redirectUrl;
+    } catch (err) {
+      if (connectBtn) {
+        connectBtn.classList.remove('pending');
+        connectBtn.classList.add('failed');
+        setTimeout(function () { connectBtn.classList.remove('failed'); }, 1000);
       }
+      showMsg(err.message || 'TX failed', true);
+      return false;
+    }
+    return true;
+  }
 
-      e.preventDefault();
-      e.stopImmediatePropagation();
+  function checkoutWithZoo() {
+    return payWithZoo();
+  }
 
-      const ajax = window.zoo_ajax || {};
-      const ajaxUrl = ajax.ajax_url || "/wp-admin/admin-ajax.php";
+  if (connectBtn) connectBtn.addEventListener('click', connectWallet);
 
-      try {
-        // Step 1 — Create pending order via AJAX
-        const createBody = new URLSearchParams({
-          action: "zoo_create_pending_order",
-          nonce: ajax.create_order_nonce || "",
-          zoo_wallet_address: zooWallet || ""
-        }).toString();
+  function openZooModal() {
+    const modal = document.getElementById('zoo-payment-modal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    const totalEl = document.querySelector('.order-total .amount');
+    const total = totalEl ? totalEl.innerText : '';
+    document.getElementById('zoo-order-total').innerText = total || '—';
+    const addrEl = document.getElementById('zoo-wallet-address');
+    if (addrEl) addrEl.textContent = publicKey ? publicKey.slice(0, 6) + '…' + publicKey.slice(-4) : 'Not connected';
+    const balanceEl = document.getElementById('zoo-balance');
+    if (balanceEl) balanceEl.textContent = document.querySelector('#zoo-balance-badge') ? document.querySelector('#zoo-balance-badge').innerText : '—';
+  }
 
-        const createRes = await fetch(ajaxUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: createBody
-        });
-        const createData = await createRes.json();
-        if (!createData.success) {
-          throw new Error(createData.data?.message || "Could not create order");
-        }
-        const orderId = (createData.data && createData.data.order_id) || createData.order_id;
-        const redirectUrl = (createData.data && (createData.data.redirect_url || createData.data.redirect)) || "/checkout/order-received/" + orderId + "/";
-        if (!orderId) throw new Error("No order ID returned");
+  function closeZooModal() {
+    const modal = document.getElementById('zoo-payment-modal');
+    if (modal) modal.style.display = 'none';
+  }
 
-        // Step 2 — Pay with Phantom (order amount)
-        const totalEl = document.querySelector(".order-total .amount");
-        const amountUi = totalEl ? parseFloat(totalEl.innerText.replace(/[^0-9.]/g, "")) : 0;
-        const amountRaw = amountUi > 0 ? Math.floor(amountUi * 1e9) : 100000000;
+  document.addEventListener('DOMContentLoaded', function () {
+    const placeOrderBtn = document.querySelector('#place_order');
+    if (placeOrderBtn) {
+      placeOrderBtn.addEventListener('click', function (e) {
+        const selected = document.querySelector('input[name="payment_method"]:checked');
+        if (!selected || selected.value !== 'zoo_devnet') return;
+        e.preventDefault();
+        e.stopPropagation();
+        openZooModal();
+      });
+    }
 
-        const txSignature = await sendZooPayment(amountRaw);
-
-        // Step 3 — Verify payment
-        const verifyBody =
-          "action=zoo_verify_payment" +
-          "&order_id=" + encodeURIComponent(orderId) +
-          "&tx=" + encodeURIComponent(txSignature);
-
-        const verifyRes = await fetch(ajaxUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: verifyBody
-        });
-        const verifyData = await verifyRes.json();
-        if (!verifyData.success) {
-          throw new Error(verifyData.data?.message || "Verification failed");
-        }
-
-        // Step 4 — Redirect
-        window.location.href = redirectUrl;
-      } catch (err) {
-        console.error("Payment failed", err);
-        alert(err.message || "Payment cancelled");
-      }
-    });
+    const confirmBtn = document.getElementById('zoo-confirm-payment');
+    if (confirmBtn) {
+      confirmBtn.addEventListener('click', function () {
+        closeZooModal();
+        payWithZoo();
+      });
+    }
   });
+
+  document.addEventListener('DOMContentLoaded', autoConnectWallet);
 })();
