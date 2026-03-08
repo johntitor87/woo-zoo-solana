@@ -182,6 +182,36 @@ function zoo_devnet_create_pending_order() {
     }
 }
 
+// -------------------- Verify payment (JS sends order_id + tx after Phantom payment) --------------------
+add_action('wp_ajax_zoo_verify_payment', 'zoo_devnet_verify_payment');
+add_action('wp_ajax_nopriv_zoo_verify_payment', 'zoo_devnet_verify_payment');
+function zoo_devnet_verify_payment() {
+    $order_id = isset($_POST['order_id']) ? absint($_POST['order_id']) : 0;
+    $tx = isset($_POST['tx']) ? sanitize_text_field(wp_unslash($_POST['tx'])) : (isset($_POST['tx_signature']) ? sanitize_text_field(wp_unslash($_POST['tx_signature'])) : '');
+
+    if (!$order_id || !$tx) {
+        wp_send_json_error(['message' => 'Missing order_id or tx']);
+    }
+
+    $order = wc_get_order($order_id);
+    if (!$order) {
+        wp_send_json_error(['message' => 'Order not found']);
+    }
+    if ($order->get_payment_method() !== 'zoo_devnet') {
+        wp_send_json_error(['message' => 'Invalid payment method']);
+    }
+    if (!$order->has_status('pending')) {
+        wp_send_json_success(['message' => 'Order already processed']);
+    }
+
+    $order->update_meta_data('_zoo_tx_signature', $tx);
+    $order->update_meta_data('_zoo_tx_hash', $tx);
+    $order->payment_complete();
+    $order->save();
+
+    wp_send_json_success(['redirect' => $order->get_checkout_order_received_url()]);
+}
+
 // -------------------- Cron confirmation: server calls this after on-chain verification --------------------
 add_action('wp_ajax_wcs_confirm_zoo_payment', 'zoo_devnet_ajax_confirm_payment');
 add_action('wp_ajax_nopriv_wcs_confirm_zoo_payment', 'zoo_devnet_ajax_confirm_payment');
