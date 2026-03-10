@@ -22,6 +22,31 @@ console.log('ZOO DEVNET WALLET JS LOADED');
     return window.zoo_ajax || {};
   }
 
+  function getOrderTotal() {
+    const el = document.querySelector('.order-total .woocommerce-Price-amount');
+    if (!el) return 0;
+    const total = el.textContent.replace(/[^0-9.]/g, '');
+    return parseFloat(total) || 0;
+  }
+
+  function generateSolanaPayQR(amount) {
+    const merchantWallet = SHOP_WALLET;
+    const mint = ZOO_MINT;
+    const solanaWeb3 = window.solanaWeb3;
+    if (!solanaWeb3) return;
+    const reference = solanaWeb3.Keypair.generate().publicKey.toString();
+    const url = 'solana:' + merchantWallet +
+      '?amount=' + amount +
+      '&spl-token=' + mint +
+      '&reference=' + reference;
+    const qrDiv = document.getElementById('zoo-qr');
+    if (!qrDiv) return;
+    qrDiv.innerHTML = '';
+    if (typeof QRCode !== 'undefined') {
+      new QRCode(qrDiv, { text: url, width: 180, height: 180 });
+    }
+  }
+
   function showMsg(message, isError) {
     if (msgSpan) {
       msgSpan.textContent = message || '';
@@ -95,6 +120,13 @@ console.log('ZOO DEVNET WALLET JS LOADED');
     const solanaWeb3 = window.solanaWeb3;
     if (!solanaWeb3) throw new Error('Solana Web3 not loaded');
 
+    const provider = window.solana;
+    if (!provider.isPhantom) throw new Error('Phantom wallet not found');
+    if (typeof provider.signAndSendTransaction !== 'function') {
+      console.error('Phantom wallet does not support signAndSendTransaction');
+      throw new Error('Phantom does not support signAndSendTransaction');
+    }
+
     const connection = new solanaWeb3.Connection(solanaWeb3.clusterApiUrl('devnet'), 'confirmed');
     const fromPubKey = new solanaWeb3.PublicKey(publicKey);
     const toPubKey = new solanaWeb3.PublicKey(SHOP_WALLET);
@@ -127,7 +159,9 @@ console.log('ZOO DEVNET WALLET JS LOADED');
     tx.recentBlockhash = latest.blockhash;
     tx.feePayer = fromPubKey;
 
-    const signedTx = await window.solana.signAndSendTransaction(tx);
+    console.log('[ZOO] Sending transaction via Phantom...');
+    const signedTx = await provider.signAndSendTransaction(tx);
+    console.log('[ZOO] Transaction sent:', signedTx.signature);
     await connection.confirmTransaction(signedTx.signature, 'confirmed');
     return signedTx.signature;
   }
@@ -136,19 +170,28 @@ console.log('ZOO DEVNET WALLET JS LOADED');
     return sendZooPayment(amount);
   };
 
-  async function payWithZoo() {
-    if (!publicKey) {
-      showMsg('Connect your wallet first.', true);
+  async function payWithZoo(amountParam) {
+    console.log('[ZOO] Attempting payment...');
+    if (!isPhantomInstalled()) {
+      console.log('[ZOO] Phantom not installed');
+      alert('Phantom Wallet is not installed!');
+      showMsg('Phantom Wallet not installed.', true);
       return false;
     }
-    const $ = window.jQuery;
-    if (!$) return false;
+    if (!publicKey) {
+      console.log('[ZOO] Wallet not connected');
+      showMsg('Connect your wallet first.', true);
+      alert('Connect your wallet first!');
+      return false;
+    }
     const ajax = getZooAjax();
-    const amount = parseFloat($('#order_review .order-total .amount').last().text().replace(/[^0-9.-]+/g, '')) || parseFloat(ajax.order_amount) || 0;
+    const amount = (amountParam != null && amountParam > 0) ? Number(amountParam) : (getOrderTotal() || parseFloat(ajax.order_amount) || 0);
     if (!amount || amount <= 0) {
+      console.log('[ZOO] Invalid order amount:', amount);
       showMsg('Invalid order amount.', true);
       return false;
     }
+    console.log('[ZOO] Sending ' + amount + ' ZOO...');
     showMsg('Processing TX...', false);
     if (connectBtn) {
       connectBtn.classList.add('pending');
@@ -172,33 +215,40 @@ console.log('ZOO DEVNET WALLET JS LOADED');
       const orderId = (orderData.data && orderData.data.order_id) || orderData.order_id;
       const redirectUrl = (orderData.data && (orderData.data.redirect_url || orderData.data.redirect)) || '/checkout/order-received/' + orderId + '/';
       if (!orderId) throw new Error('No order ID returned');
+      console.log('[ZOO] Order created:', orderId);
 
       // 2) Phantom – sign & send transaction
       const txSignature = await window.sendZooTokens(publicKey, amount);
+      console.log('[ZOO] Payment successful, tx:', txSignature);
 
       // 3) Verify (store pending; cron will confirm on-chain)
+      const verifyPayload = {
+        signature: txSignature,
+        order_id: orderId,
+        expectedAmount: amount,
+        network: 'devnet'
+      };
+      console.log('[ZOO] Verifying payment...', verifyPayload);
       const verifyResp = await fetch(VERIFY_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          signature: txSignature,
-          order_id: orderId,
-          expectedAmount: amount,
-          network: 'devnet'
-        })
+        body: JSON.stringify(verifyPayload)
       });
       const verifyData = await verifyResp.json();
+      console.log('Verification Response:', verifyData);
       if (!verifyData.success) throw new Error(verifyData.error || 'Verification failed');
 
       // 4) Redirect
       window.location.href = redirectUrl;
     } catch (err) {
+      console.error('[ZOO] Payment error:', err);
       if (connectBtn) {
         connectBtn.classList.remove('pending');
         connectBtn.classList.add('failed');
         setTimeout(function () { connectBtn.classList.remove('failed'); }, 1000);
       }
       showMsg(err.message || 'TX failed', true);
+      alert('Payment failed: ' + (err.message || 'Unknown error'));
       return false;
     }
     return true;
@@ -214,13 +264,14 @@ console.log('ZOO DEVNET WALLET JS LOADED');
     const modal = document.getElementById('zoo-payment-modal');
     if (!modal) return;
     modal.style.display = 'flex';
-    const totalEl = document.querySelector('.order-total .amount');
-    const total = totalEl ? totalEl.innerText : '';
-    document.getElementById('zoo-order-total').innerText = total || '—';
+    const total = getOrderTotal();
+    const totalEl = document.getElementById('zoo-order-total');
+    if (totalEl) totalEl.innerText = total + ' ZOO';
     const addrEl = document.getElementById('zoo-wallet-address');
-    if (addrEl) addrEl.textContent = publicKey ? publicKey.slice(0, 6) + '…' + publicKey.slice(-4) : 'Not connected';
+    if (addrEl) addrEl.textContent = publicKey ? publicKey.slice(0, 6) + '…' + publicKey.slice(-4) : '—';
     const balanceEl = document.getElementById('zoo-balance');
     if (balanceEl) balanceEl.textContent = document.querySelector('#zoo-balance-badge') ? document.querySelector('#zoo-balance-badge').innerText : '—';
+    generateSolanaPayQR(total);
   }
 
   function closeZooModal() {
@@ -240,14 +291,34 @@ console.log('ZOO DEVNET WALLET JS LOADED');
       });
     }
 
+    // "Pay From This Browser" – get amount and trigger payment
     const confirmBtn = document.getElementById('zoo-confirm-payment');
     if (confirmBtn) {
-      confirmBtn.addEventListener('click', function () {
-        closeZooModal();
-        payWithZoo();
+      confirmBtn.addEventListener('click', async function () {
+        const amount = getOrderTotal();
+        if (!amount) {
+          alert('Invalid order amount');
+          return;
+        }
+        if (confirmBtn.disabled) return;
+        confirmBtn.disabled = true;
+        try {
+          await payWithZoo(amount);
+        } finally {
+          confirmBtn.disabled = false;
+        }
       });
     }
+
+    // Cancel – close modal
+    const closeBtn = document.getElementById('zoo-close-modal');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', closeZooModal);
+    }
   });
+
+  // Expose for debugging (e.g. window.payWithZoo() in console)
+  window.payWithZoo = payWithZoo;
 
   document.addEventListener('DOMContentLoaded', autoConnectWallet);
 })();

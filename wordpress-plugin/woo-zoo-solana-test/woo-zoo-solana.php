@@ -9,30 +9,27 @@
 if (!defined('ABSPATH')) exit;
 
 // -------------------- Enqueue Scripts --------------------
-// Order guarantees: solana-web3 → solana-spl-token → zoo-wallet-devnet (wallet waits for both libraries).
+// Important: Do NOT use @latest for Solana libraries. WordPress caching breaks them.
 add_action('wp_enqueue_scripts', function () {
 
     if (is_admin()) return;
 
-    // Solana Web3
     wp_enqueue_script(
         'solana-web3',
-        'https://unpkg.com/@solana/web3.js@latest/lib/index.iife.js',
+        'https://unpkg.com/@solana/web3.js@1.95.2/lib/index.iife.js',
         [],
         null,
         true
     );
 
-    // SPL Token Library
     wp_enqueue_script(
         'solana-spl-token',
-        'https://unpkg.com/@solana/spl-token@latest/lib/index.iife.js',
+        'https://unpkg.com/@solana/spl-token@0.4.0/lib/index.iife.js',
         ['solana-web3'],
         null,
         true
     );
 
-    // QR Code Generator
     wp_enqueue_script(
         'qrcodejs',
         'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js',
@@ -41,16 +38,15 @@ add_action('wp_enqueue_scripts', function () {
         true
     );
 
-    // ZOO Wallet Script
     wp_enqueue_script(
         'zoo-wallet-devnet',
         plugin_dir_url(__FILE__) . 'wallet-devnet.js',
-        ['solana-web3','solana-spl-token'],
+        ['solana-web3', 'solana-spl-token', 'qrcodejs'],
         '1.0',
         true
     );
 
-}, 10);
+}, 5);
 
 add_action('wp_enqueue_scripts', 'zoo_enqueue_wallet_scripts_devnet');
 function zoo_enqueue_wallet_scripts_devnet() {
@@ -118,17 +114,24 @@ function zoo_enqueue_wallet_scripts_devnet() {
 add_action('wp_footer', function () {
     if (is_admin()) return;
     ?>
-<div id="zoo-payment-modal" style="display:none;">
-  <div class="zoo-modal-inner">
+<div id="zoo-payment-modal" class="zoo-modal" style="display:none;">
+  <div class="zoo-phone">
+
     <h2>🦁 Pay with ZOO</h2>
-    <div id="zooQR" class="zoo-qr-container"></div>
-    <p class="zoo-qr-hint">Scan with Phantom Wallet</p>
-    <div id="zoo-payment-info">
-      <p>Wallet: <span id="zoo-wallet-address"></span></p>
-      <p>Balance: <span id="zoo-balance"></span></p>
-      <p>Total: <span id="zoo-order-total"></span></p>
-    </div>
-    <button type="button" id="zoo-confirm-payment">Pay From This Browser</button>
+    <p>Confirm payment with Phantom</p>
+
+    <div id="zoo-qr"></div>
+
+    <p>Wallet: <span id="zoo-wallet-address">—</span></p>
+    <p>Balance: <span id="zoo-balance">—</span></p>
+    <p>Total: <span id="zoo-order-total">—</span></p>
+
+    <button type="button" id="zoo-confirm-payment">
+      Pay From This Browser
+    </button>
+
+    <button type="button" id="zoo-close-modal">Cancel</button>
+
   </div>
 </div>
 <?php
@@ -139,7 +142,7 @@ add_action('wp_enqueue_scripts', function () {
     if (is_admin()) return;
     wp_register_style('woo-zoo-modal', false, [], '1.0');
     wp_enqueue_style('woo-zoo-modal');
-    wp_add_inline_style('woo-zoo-modal', '#zoo-payment-modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:99999;}#zoo-payment-modal[style*="display:none"]{display:none!important;}.zoo-modal-inner{background:#0b0b0b;padding:40px;border-radius:12px;border:2px solid #00ffa3;box-shadow:0 0 25px #00ffa3;text-align:center;color:white;}.zoo-qr-container{min-height:220px;margin:15px 0;display:flex;align-items:center;justify-content:center;}.zoo-qr-hint{margin:0 0 15px;font-size:14px;color:#aaa;}#zoo-confirm-payment{background:#00ffa3;color:black;font-weight:bold;padding:12px 25px;border:none;border-radius:8px;cursor:pointer;}');
+    wp_add_inline_style('woo-zoo-modal', '#zoo-payment-modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:99999;}#zoo-payment-modal[style*="display:none"]{display:none!important;}.zoo-modal .zoo-phone{background:#0b0b0b;padding:40px;border-radius:12px;border:2px solid #00ffa3;box-shadow:0 0 25px #00ffa3;text-align:center;color:white;}#zoo-qr{min-height:200px;margin:15px 0;display:flex;align-items:center;justify-content:center;}#zoo-confirm-payment{background:#00ffa3;color:black;font-weight:bold;padding:12px 25px;border:none;border-radius:8px;cursor:pointer;margin-right:8px;}#zoo-close-modal{background:#444;color:white;padding:12px 25px;border:none;border-radius:8px;cursor:pointer;}');
 }, 15);
 
 // -------------------- Create pending order (cron-based flow: order first, then TX, then server cron completes) --------------------
