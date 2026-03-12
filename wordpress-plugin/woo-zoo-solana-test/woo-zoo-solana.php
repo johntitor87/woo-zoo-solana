@@ -38,10 +38,11 @@ add_action('wp_enqueue_scripts', function () {
         true
     );
 
+    // jQuery required: wallet-devnet uses $('form.checkout').on('checkout_place_order_zoo_devnet', ...)
     wp_enqueue_script(
         'zoo-wallet-devnet',
         plugin_dir_url(__FILE__) . 'wallet-devnet.js',
-        ['solana-web3', 'solana-spl-token', 'qrcodejs'],
+        ['jquery', 'solana-web3', 'solana-spl-token', 'qrcodejs'],
         '1.0',
         true
     );

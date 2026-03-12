@@ -71,7 +71,9 @@ app.post('/verify-devnet-reference', async (req, res) => {
 });
 
 // ------------------ HEALTH CHECK ------------------
-app.get('/health', (req, res) => res.json({ status: 'ok' }));
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
+});
 app.get('/', (req, res) => res.json({ status: 'ok', service: 'ZOO verification' }));
 
 // ------------------ VERIFY PAYMENT (single endpoint: store pending, return immediately; cron verifies) ------------------

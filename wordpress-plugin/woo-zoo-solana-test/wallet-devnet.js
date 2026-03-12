@@ -58,30 +58,66 @@ console.log('ZOO DEVNET WALLET JS LOADED');
     return window.solana && window.solana.isPhantom;
   }
 
+  function updateWalletUI() {
+    const pill = document.getElementById('connect-wallet-btn');
+    if (!pill || !publicKey) return;
+    pill.innerText =
+      publicKey.slice(0, 4) + '...' +
+      publicKey.slice(-4);
+  }
+
   function updateUIConnected() {
     if (publicKey) {
       showMsg('Wallet Connected', false);
-      if (connectBtn) connectBtn.textContent = 'Connected';
+      updateWalletUI();
     }
   }
 
+  function syncPublicKey(pk) {
+    publicKey = pk;
+    window.publicKey = pk;
+  }
+
   async function fetchZooBalance(wallet) {
+    // Use global loaded by Woo enqueue (window.solanaWeb3); bare solanaWeb3 is not in scope in IIFE
     const solanaWeb3 = window.solanaWeb3;
     if (!solanaWeb3) return;
-    const connection = new solanaWeb3.Connection(solanaWeb3.clusterApiUrl('devnet'), 'confirmed');
-    const mint = new solanaWeb3.PublicKey(ZOO_MINT);
-    const owner = new solanaWeb3.PublicKey(wallet);
-    const accounts = await connection.getParsedTokenAccountsByOwner(owner, { mint: mint });
+
+    const connection =
+      new solanaWeb3.Connection(
+        solanaWeb3.clusterApiUrl('devnet')
+      );
+
+    const mint =
+      new solanaWeb3.PublicKey(
+        'FKkgeZxYLxoZ1WciErXKbeNTf5CB296zv51euCR7MZN3'
+      );
+
+    const accounts =
+      await connection.getParsedTokenAccountsByOwner(
+        new solanaWeb3.PublicKey(wallet),
+        { mint }
+      );
+
     let balance = 0;
+
     if (accounts.value.length) {
-      balance = accounts.value[0].account.data.parsed.info.tokenAmount.uiAmount;
+      balance =
+        accounts.value[0]
+          .account.data.parsed.info.tokenAmount.uiAmount;
     }
+
+    const zooBalanceEl = document.getElementById('zoo-balance');
+    if (zooBalanceEl) {
+      zooBalanceEl.innerText = balance + ' ZOO';
+    }
+
     const badge = document.querySelector('#zoo-balance-badge');
     if (badge) badge.innerText = (balance != null ? balance : 0).toFixed(2) + ' ZOO';
   }
 
   function updateBalanceBadge() {
-    if (publicKey) return fetchZooBalance(publicKey.toString());
+    if (publicKey) return fetchZooBalance(publicKey);
   }
 
   async function connectWallet() {
@@ -91,9 +127,9 @@ console.log('ZOO DEVNET WALLET JS LOADED');
     }
     try {
       const resp = await window.solana.connect();
-      publicKey = resp.publicKey.toString();
+      syncPublicKey(resp.publicKey.toString());
       updateUIConnected();
-      await fetchZooBalance(publicKey.toString());
+      await fetchZooBalance(publicKey);
     } catch (e) {
       showMsg('Wallet connection rejected.', true);
     }
@@ -104,13 +140,15 @@ console.log('ZOO DEVNET WALLET JS LOADED');
     try {
       const resp = await window.solana.connect({ onlyIfTrusted: true });
       if (resp && resp.publicKey) {
-        publicKey = resp.publicKey.toString();
+        syncPublicKey(resp.publicKey.toString());
+        updateWalletUI();
         updateUIConnected();
-        await fetchZooBalance(publicKey.toString());
+        await fetchZooBalance(publicKey);
       } else {
         showMsg('Ready to connect.', false);
       }
     } catch (e) {
+      console.log('Wallet not yet trusted');
       showMsg('Ready to connect.', false);
     }
   }
@@ -280,14 +318,13 @@ console.log('ZOO DEVNET WALLET JS LOADED');
   }
 
   document.addEventListener('DOMContentLoaded', function () {
-    const placeOrderBtn = document.querySelector('#place_order');
-    if (placeOrderBtn) {
-      placeOrderBtn.addEventListener('click', function (e) {
-        const selected = document.querySelector('input[name="payment_method"]:checked');
-        if (!selected || selected.value !== 'zoo_devnet') return;
-        e.preventDefault();
-        e.stopPropagation();
-        openZooModal();
+    // Place Order with zoo_devnet → Phantom opens immediately (blocks default checkout)
+    if (typeof jQuery !== 'undefined') {
+      jQuery(function ($) {
+        $('form.checkout').on('checkout_place_order_zoo_devnet', function () {
+          payWithZoo();
+          return false;
+        });
       });
     }
 
@@ -320,5 +357,20 @@ console.log('ZOO DEVNET WALLET JS LOADED');
   // Expose for debugging (e.g. window.payWithZoo() in console)
   window.payWithZoo = payWithZoo;
 
-  document.addEventListener('DOMContentLoaded', autoConnectWallet);
+  // Phantom auto reconnect silently (onlyIfTrusted)
+  document.addEventListener('DOMContentLoaded', async function () {
+    if (window.solana && window.solana.isPhantom) {
+      try {
+        const resp = await window.solana.connect({
+          onlyIfTrusted: true
+        });
+        window.publicKey = resp.publicKey.toString();
+        syncPublicKey(window.publicKey); // keep local publicKey in sync for payWithZoo
+        updateWalletUI();
+        await fetchZooBalance(publicKey);
+      } catch (e) {
+        console.log('Wallet not yet trusted');
+      }
+    }
+  });
 })();
