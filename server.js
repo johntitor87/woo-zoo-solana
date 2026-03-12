@@ -70,11 +70,18 @@ app.post('/verify-devnet-reference', async (req, res) => {
   }
 });
 
-// ------------------ HEALTH CHECK ------------------
+// ------------------ HEALTH CHECK (Render expects /health; use process.env.PORT) ------------------
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
 });
-app.get('/', (req, res) => res.json({ status: 'ok', service: 'ZOO verification' }));
+app.get('/', (req, res) => {
+  res.send('Zoo Solana Checkout API is running!');
+});
+
+// --- Placeholder Phantom wallet endpoint ---
+app.post('/wallet/connect', (req, res) => {
+  res.json({ message: 'Wallet connection endpoint works!' });
+});
 
 // ------------------ VERIFY PAYMENT (single endpoint: store pending, return immediately; cron verifies) ------------------
 // Body: signature (or txSignature), order_id, expectedAmount. Optional: network = 'devnet' → devnet cron; else mainnet cron.
@@ -231,5 +238,5 @@ cron.schedule('*/10 * * * * *', async () => {
 
 // ------------------ START SERVER ------------------
 app.listen(PORT, () => {
-  console.log(`ZOO verification server running on port ${PORT}`);
+  console.log(`Server listening on port ${PORT}`);
 });

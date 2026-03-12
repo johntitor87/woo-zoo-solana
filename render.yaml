@@ -1,24 +1,12 @@
-# Render.com – fulcanellie repo (monorepo)
-# Services: Staking API (repo root) and ZOO Solana Checkout API (zoo-solana-checkout-api/).
-# When connecting this repo, set Root Directory in the dashboard if you deploy only one service.
-
 services:
   - type: web
-    name: fulcanellie-staking-api
-    runtime: node
-    rootDir: fulcanellie-woocommerce
-    buildCommand: npm install && npm run build
-    startCommand: npm run staking-api
-    envVars:
-      - key: NODE_VERSION
-        value: "20"
-
-  - type: web
     name: zoo-solana-checkout-api
-    runtime: node
-    rootDir: zoo-solana-checkout-api
+    env: node
+    plan: free
+    region: oregon
+    branch: main
+    root: "."
     buildCommand: npm install
-    startCommand: npm start
-    envVars:
-      - key: NODE_VERSION
-        value: "20"
+    startCommand: node server.js
+    autoDeploy: true
+    healthCheckPath: /health
