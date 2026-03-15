@@ -1,6 +1,7 @@
-// server.js - Woo ZOO Token Verification (Free RPC + Auto-Poll)
+// server.js - API server: health, wallet routes, ZOO verification + cron
 const express = require('express');
 const cors = require('cors');
+const walletRoutes = require('./wallet-devnet');
 const { Connection, clusterApiUrl, PublicKey } = require('@solana/web3.js');
 const { getAssociatedTokenAddressSync } = require('@solana/spl-token');
 const winston = require('winston');
@@ -70,18 +71,21 @@ app.post('/verify-devnet-reference', async (req, res) => {
   }
 });
 
-// ------------------ HEALTH CHECK (Render expects /health; use process.env.PORT) ------------------
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
-});
+// Root route
 app.get('/', (req, res) => {
-  res.send('Zoo Solana Checkout API is running!');
+  res.send('Zoo Solana Checkout API running');
 });
 
-// --- Placeholder Phantom wallet endpoint ---
-app.post('/wallet/connect', (req, res) => {
-  res.json({ message: 'Wallet connection endpoint works!' });
+// Health route (Render expects /health; use process.env.PORT)
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'OK',
+    timestamp: new Date().toISOString()
+  });
 });
+
+// Mount wallet routes (/wallet/create-payment, /wallet/verify-payment)
+app.use('/wallet', walletRoutes);
 
 // ------------------ VERIFY PAYMENT (single endpoint: store pending, return immediately; cron verifies) ------------------
 // Body: signature (or txSignature), order_id, expectedAmount. Optional: network = 'devnet' → devnet cron; else mainnet cron.
