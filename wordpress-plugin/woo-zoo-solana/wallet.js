@@ -16,6 +16,28 @@
   let lastBalance = null;
   let lastGas = null;
 
+  // Auto-detect network from mint: mainnet mint → mainnet RPC, else devnet
+  const MAINNET_ZOO_MINT = 'FKkgeZxYLxoZ1WciErXKbeNTf5CB296zv51euCR7MZN3';
+
+  function getMintAddress() {
+    return (window.zoo_ajax && window.zoo_ajax.zoo_mint) ? window.zoo_ajax.zoo_mint : MAINNET_ZOO_MINT;
+  }
+
+  function detectNetwork() {
+    var mint = getMintAddress();
+    if (mint === MAINNET_ZOO_MINT) {
+      return { network: 'mainnet-beta', rpcUrl: 'https://api.mainnet-beta.solana.com' };
+    }
+    return { network: 'devnet', rpcUrl: 'https://api.devnet.solana.com' };
+  }
+
+  function getConnection() {
+    if (!window.solanaWeb3) return null;
+    var detected = detectNetwork();
+    network = detected.network;
+    return new window.solanaWeb3.Connection(detected.rpcUrl, 'confirmed');
+  }
+
   function showTooltip() {
     if (!connectBtn) return;
     let tooltip = connectBtn.querySelector('.tooltip');
@@ -84,6 +106,8 @@
   async function connectWallet() {
     if (!window.solana || !window.solana.isPhantom) return alert('Install Phantom Wallet');
     try {
+      var detected = detectNetwork();
+      network = detected.network;
       const resp = await window.solana.connect({ onlyIfTrusted: false });
       publicKey = resp.publicKey.toString();
       fillHiddenInput();
@@ -202,15 +226,17 @@
   // --- SPL ZOO Transfer ---
   async function sendZooTokens(amount) {
     if (!publicKey) { alert('Connect wallet first'); return; }
-    if (!window.zoo_ajax || !window.zoo_ajax.shop_wallet || !window.zoo_ajax.zoo_mint) { alert('ZOO config missing'); return; }
+    if (!window.zoo_ajax || !window.zoo_ajax.shop_wallet) { alert('ZOO config missing'); return; }
 
     const Solana = window.solanaWeb3;
     if (!Solana) { alert('Solana Web3 not loaded'); return; }
 
-    const connection = new Solana.Connection(Solana.clusterApiUrl('mainnet-beta'), 'confirmed');
+    const connection = getConnection();
+    if (!connection) { alert('Connection not available'); return; }
+
     const fromPubKey = new Solana.PublicKey(publicKey);
     const toPubKey = new Solana.PublicKey(window.zoo_ajax.shop_wallet);
-    const zooMint = new Solana.PublicKey(window.zoo_ajax.zoo_mint);
+    const zooMint = new Solana.PublicKey(getMintAddress());
 
     const fromAccounts = await connection.getTokenAccountsByOwner(fromPubKey, { mint: zooMint });
     if (!fromAccounts.value.length) throw new Error('No ZOO token account');
@@ -314,6 +340,8 @@
   setInterval(fetchBalance, 15000);
 
   window.addEventListener('load', function () {
+    var detected = detectNetwork();
+    network = detected.network;
     if (window.solana && window.solana.isPhantom) {
       window.solana.connect({ onlyIfTrusted: true }).then(function (resp) {
         if (resp && resp.publicKey) {

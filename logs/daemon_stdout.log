@@ -559,3 +559,12 @@
 [2026-02-19 11:58:08] Starting Fulcanellie character (run #1)
 [2026-02-19 11:58:09] Loading environment variables from .env file
 [2026-02-19 11:58:09] Running Node.js application via npm script
+[2026-03-07 23:23:36] ===== STARTING FULCANELLIE SERVICE =====
+[2026-03-08 23:06:06] Service started at: Sat Mar  7 23:23:36 PST 2026
+[2026-03-08 23:06:06] Logs will be saved to: /Users/hendrix/eliza-starter/fulcanellie/logs/fulcanellie_service_20260307.log
+[2026-03-08 23:06:06] ===== NEW DAY - ROTATING LOG FILE =====
+[2026-03-08 23:06:06] Service continuing at: Sun Mar  8 23:06:06 PDT 2026
+[2026-03-08 23:06:06] Total runs so far: 1, Crashes: 0
+[2026-03-08 23:06:06] Starting Fulcanellie character (run #1)
+[2026-03-08 23:06:06] Loading environment variables from .env file
+[2026-03-08 23:06:06] Running Node.js application via npm script
