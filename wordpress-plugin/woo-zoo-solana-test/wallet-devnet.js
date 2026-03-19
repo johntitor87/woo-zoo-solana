@@ -274,7 +274,27 @@ console.log('ZOO DEVNET WALLET JS LOADED');
       });
       const verifyData = await verifyResp.json();
       console.log('Verification Response:', verifyData);
-      if (!verifyData.success) throw new Error(verifyData.error || 'Verification failed');
+
+      if (verifyData.success) {
+        await Promise.all([
+          (async function () {
+            const wooVerifyRes = await fetch("/wp-json/zoo/v1/verify-payment", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                order_id: Number(orderId),
+                signature: txSignature
+              })
+            });
+            const wooVerifyData = await wooVerifyRes.json().catch(() => ({}));
+            if (!wooVerifyRes.ok || !wooVerifyData.success) {
+              throw new Error((wooVerifyData && wooVerifyData.message) || 'WooCommerce order update failed');
+            }
+          })()
+        ]);
+      } else {
+        throw new Error(verifyData.error || 'Verification failed');
+      }
 
       // 4) Redirect
       window.location.href = redirectUrl;

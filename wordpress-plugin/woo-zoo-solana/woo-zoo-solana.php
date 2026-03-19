@@ -8,6 +8,52 @@
 
 if (!defined('ABSPATH')) exit;
 
+// -------------------- REST: verify payment + update Woo order --------------------
+// Allows an external verification service to mark the Woo order as paid.
+add_action('rest_api_init', function () {
+    register_rest_route('zoo/v1', '/verify-payment', array(
+        'methods' => 'POST',
+        'callback' => 'zoo_verify_payment_callback',
+        'permission_callback' => '__return_true',
+        'args' => array(
+            'order_id' => array(
+                'required' => true,
+                'type' => 'integer',
+            ),
+            'signature' => array(
+                'required' => true,
+                'type' => 'string',
+            ),
+        ),
+    ));
+});
+
+function zoo_verify_payment_callback($request) {
+    $order_id = $request->get_param('order_id');
+    $signature = $request->get_param('signature');
+
+    if (!$order_id || !$signature) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Missing order_id or signature'], 400);
+    }
+
+    $order = wc_get_order($order_id);
+    if (!$order) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Order not found'], 404);
+    }
+
+    // Prevent double processing.
+    $status = $order->get_status();
+    if ($status === 'processing' || $status === 'completed') {
+        return new WP_REST_Response(['success' => true, 'message' => 'Already paid'], 200);
+    }
+
+    // Mark as paid.
+    $order->payment_complete($signature);
+    $order->add_order_note('ZOO payment verified. TX: ' . $signature);
+
+    return new WP_REST_Response(['success' => true], 200);
+}
+
 // -------------------- Enqueue scripts --------------------
 add_action('wp_enqueue_scripts', 'zoo_enqueue_wallet_scripts');
 function zoo_enqueue_wallet_scripts() {
