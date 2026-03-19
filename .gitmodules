@@ -1,0 +1,3 @@
+[submodule "woo-solana-payment-devnet"]
+	path = woo-solana-payment-devnet
+	url = https://github.com/johntitor87/woo-solana-payment-devnet.git
