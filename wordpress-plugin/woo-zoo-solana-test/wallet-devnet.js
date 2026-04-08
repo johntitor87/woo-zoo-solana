@@ -11,8 +11,8 @@ console.log('ZOO DEVNET WALLET JS LOADED');
   // Devnet config (Network: https://api.devnet.solana.com)
   const DEVNET_RPC = 'https://api.devnet.solana.com';
   const ZOO_MINT = 'FKkgeZxYLxoZ1WciErXKbeNTf5CB296zv51euCR7MZN3';
-  const SHOP_WALLET = '6XPtpWPgFfoxRcLCwxTKXawrvzeYjviw4EYpSSLW42gc';
-  const VERIFY_URL = 'https://woo-solana-payment-devnet.onrender.com/verify-zoo-payment';
+  const SHOP_WALLET = 'AVJqhvECgwFkMQbmmTinbf4DxPco6fhzWEpzWyGi53xa';
+  const VERIFY_URL = 'https://woo-solana-payment-devnet.onrender.com/verify-devnet-payment';
 
   const connectBtn = document.getElementById('connect-wallet-btn');
   const msgSpan = document.getElementById('zoo-wallet-msg') || document.getElementById('zoo-header-wallet-msg');
@@ -120,6 +120,55 @@ console.log('ZOO DEVNET WALLET JS LOADED');
     if (publicKey) return fetchZooBalance(publicKey);
   }
 
+  function sleep(ms) {
+    return new Promise(function (resolve) {
+      setTimeout(resolve, ms);
+    });
+  }
+
+  /** Match Render server math: decimal string → raw base units (no float drift). */
+  function decimalStringToRawBigInt(amountStr, decimals) {
+    const dec = Number(decimals);
+    if (!Number.isFinite(dec) || dec < 0) return null;
+    const str = String(amountStr || '').trim();
+    if (!/^\d+(\.\d+)?$/.test(str)) return null;
+    const parts = str.split('.');
+    const whole = parts[0] || '0';
+    const frac = (parts[1] || '').slice(0, dec).padEnd(dec, '0');
+    try {
+      return BigInt(whole + frac);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /** SPL Associated Token Program — same as @solana/spl-token ASSOCIATED_TOKEN_PROGRAM_ID */
+  const ASSOCIATED_TOKEN_PROGRAM_STR = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL';
+
+  function getAssociatedTokenAddressSync(solanaWeb3, mint, owner, tokenProgramId, associatedTokenProgramId) {
+    const [address] = solanaWeb3.PublicKey.findProgramAddressSync(
+      [owner.toBuffer(), tokenProgramId.toBuffer(), mint.toBuffer()],
+      associatedTokenProgramId
+    );
+    return address;
+  }
+
+  /** Create shop ATA if missing; idempotent — ok when ATA already exists. Buyer pays rent. */
+  function createAssociatedTokenAccountIdempotentInstruction(solanaWeb3, payer, associatedToken, owner, mint, tokenProgramId, associatedTokenProgramId) {
+    return new solanaWeb3.TransactionInstruction({
+      programId: associatedTokenProgramId,
+      keys: [
+        { pubkey: payer, isSigner: true, isWritable: true },
+        { pubkey: associatedToken, isSigner: false, isWritable: true },
+        { pubkey: owner, isSigner: false, isWritable: false },
+        { pubkey: mint, isSigner: false, isWritable: false },
+        { pubkey: solanaWeb3.SystemProgram.programId, isSigner: false, isWritable: false },
+        { pubkey: tokenProgramId, isSigner: false, isWritable: false }
+      ],
+      data: new Uint8Array([1])
+    });
+  }
+
   async function connectWallet() {
     if (!isPhantomInstalled()) {
       showMsg('Phantom Wallet not installed.', true);
@@ -174,25 +223,47 @@ console.log('ZOO DEVNET WALLET JS LOADED');
     const fromTokens = await connection.getTokenAccountsByOwner(fromPubKey, { mint: mintPubKey });
     if (!fromTokens.value.length) throw new Error('No ZOO token account in wallet');
 
-    const toTokens = await connection.getTokenAccountsByOwner(toPubKey, { mint: mintPubKey });
-    if (!toTokens.value.length) throw new Error('Recipient token account does not exist');
+    const associatedTokenProgramId = new solanaWeb3.PublicKey(ASSOCIATED_TOKEN_PROGRAM_STR);
+    const shopTokenAccount = getAssociatedTokenAddressSync(
+      solanaWeb3,
+      mintPubKey,
+      toPubKey,
+      TOKEN_PROGRAM_ID,
+      associatedTokenProgramId
+    );
 
-    const rawAmount = Math.floor(amount * Math.pow(10, 9));
+    const ajax = getZooAjax();
+    const dec = Number.isFinite(Number(ajax.decimals)) ? Number(ajax.decimals) : 9;
+    const amountStr = typeof amount === 'string' ? amount.trim() : String(amount);
+    const rawBig = decimalStringToRawBigInt(amountStr, dec);
+    if (!rawBig || rawBig <= 0n) {
+      throw new Error('Invalid payment amount');
+    }
     const data = new Uint8Array(9);
     data[0] = 3;
-    new DataView(data.buffer).setBigUint64(1, BigInt(rawAmount), true);
+    new DataView(data.buffer).setBigUint64(1, rawBig, true);
 
     const transferIx = new solanaWeb3.TransactionInstruction({
       keys: [
         { pubkey: fromTokens.value[0].pubkey, isSigner: false, isWritable: true },
-        { pubkey: toTokens.value[0].pubkey, isSigner: false, isWritable: true },
+        { pubkey: shopTokenAccount, isSigner: false, isWritable: true },
         { pubkey: fromPubKey, isSigner: true, isWritable: false }
       ],
       programId: TOKEN_PROGRAM_ID,
       data: data
     });
 
-    const tx = new solanaWeb3.Transaction().add(transferIx);
+    const createAtaIx = createAssociatedTokenAccountIdempotentInstruction(
+      solanaWeb3,
+      fromPubKey,
+      shopTokenAccount,
+      toPubKey,
+      mintPubKey,
+      TOKEN_PROGRAM_ID,
+      associatedTokenProgramId
+    );
+
+    const tx = new solanaWeb3.Transaction().add(createAtaIx).add(transferIx);
     const latest = await connection.getLatestBlockhash();
     tx.recentBlockhash = latest.blockhash;
     tx.feePayer = fromPubKey;
@@ -200,7 +271,7 @@ console.log('ZOO DEVNET WALLET JS LOADED');
     console.log('[ZOO] Sending transaction via Phantom...');
     const signedTx = await provider.signAndSendTransaction(tx);
     console.log('[ZOO] Transaction sent:', signedTx.signature);
-    await connection.confirmTransaction(signedTx.signature, 'confirmed');
+    await connection.confirmTransaction(signedTx.signature, 'finalized');
     return signedTx.signature;
   }
 
@@ -252,30 +323,61 @@ console.log('ZOO DEVNET WALLET JS LOADED');
       if (!orderData.success) throw new Error(orderData.data?.message || 'Could not create order');
       const orderId = (orderData.data && orderData.data.order_id) || orderData.order_id;
       const redirectUrl = (orderData.data && (orderData.data.redirect_url || orderData.data.redirect)) || '/checkout/order-received/' + orderId + '/';
+      const serverTotalRaw = (orderData.data && orderData.data.total) || orderData.total;
+      const serverTotalStr = String(serverTotalRaw == null ? '' : serverTotalRaw).trim();
+      const serverTotal = parseFloat(serverTotalStr);
       if (!orderId) throw new Error('No order ID returned');
+      if (!serverTotalStr || !serverTotal || serverTotal <= 0) throw new Error('Invalid order total returned from server');
       console.log('[ZOO] Order created:', orderId);
 
-      // 2) Phantom – sign & send transaction
-      const txSignature = await window.sendZooTokens(publicKey, amount);
+      // 2) Phantom – sign & send transaction (string total avoids float drift vs verifier)
+      const txSignature = await window.sendZooTokens(publicKey, serverTotalStr);
       console.log('[ZOO] Payment successful, tx:', txSignature);
 
       // 3) Verify (store pending; cron will confirm on-chain)
       const verifyPayload = {
         signature: txSignature,
         order_id: orderId,
-        expectedAmount: amount,
+        expectedAmount: serverTotalStr,
         network: 'devnet'
       };
       console.log('[ZOO] Verifying payment...', verifyPayload);
-      const verifyResp = await fetch(VERIFY_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(verifyPayload)
-      });
-      const verifyData = await verifyResp.json();
+      let verifyData = null;
+      let lastVerifyText = '';
+      let lastVerifyStatus = 0;
+      for (let attempt = 1; attempt <= 5; attempt++) {
+        const verifyResp = await fetch('/wp-json/zoo/v1/verify-render', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(verifyPayload)
+        });
+        lastVerifyStatus = verifyResp.status;
+        lastVerifyText = await verifyResp.text().catch(function () { return ''; });
+        verifyData = {};
+        if (lastVerifyText) {
+          try {
+            verifyData = JSON.parse(lastVerifyText);
+          } catch (parseErr) {
+            verifyData = {
+              success: false,
+              message: 'verify-render returned non-JSON (HTTP ' + lastVerifyStatus + ')',
+              raw_preview: lastVerifyText.slice(0, 400)
+            };
+          }
+        }
+        if (verifyResp.ok && verifyData && verifyData.success) break;
+
+        const msg = String((verifyData && (verifyData.message || verifyData.error)) || '').toLowerCase();
+        const retryable = msg.includes('not finalized') || msg.includes('invalid transaction') || msg.includes('error verifying transaction');
+        if (attempt < 5 && retryable) {
+          await sleep(2000);
+          continue;
+        }
+        break;
+      }
       console.log('Verification Response:', verifyData);
 
-      if (verifyData.success) {
+      if (verifyData && verifyData.success) {
         await Promise.all([
           (async function () {
             const wooVerifyRes = await fetch("/wp-json/zoo/v1/verify-payment", {
@@ -293,7 +395,14 @@ console.log('ZOO DEVNET WALLET JS LOADED');
           })()
         ]);
       } else {
-        throw new Error(verifyData.error || 'Verification failed');
+        const extra =
+          (verifyData && verifyData.render_body) ? String(verifyData.render_body) :
+          (verifyData && verifyData.raw_preview) ? String(verifyData.raw_preview) : '';
+        const detail =
+          (verifyData && (verifyData.message || verifyData.error)) ||
+          extra ||
+          (lastVerifyText ? ('HTTP ' + lastVerifyStatus + ': ' + lastVerifyText.slice(0, 240)) : ('HTTP ' + lastVerifyStatus));
+        throw new Error(detail || 'Verification failed');
       }
 
       // 4) Redirect

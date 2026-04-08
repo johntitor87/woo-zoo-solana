@@ -52,6 +52,99 @@ add_action('rest_api_init', function () {
     ));
 });
 
+// Browser-safe proxy for Render verification (avoids CORS "Failed to fetch").
+add_action('rest_api_init', function () {
+    register_rest_route('zoo/v1', '/verify-render', array(
+        'methods' => 'POST',
+        'callback' => 'zoo_verify_render_proxy',
+        'permission_callback' => '__return_true',
+    ));
+});
+
+function zoo_verify_render_proxy($request) {
+    if (function_exists('set_time_limit')) {
+        // First HTTP attempt + optional retry can exceed 120s on cold start.
+        set_time_limit(300);
+    }
+    $params = $request->get_json_params();
+    $signature = isset($params['signature']) ? sanitize_text_field(wp_unslash($params['signature'])) : '';
+    $expected_amount = isset($params['expectedAmount']) ? (string) $params['expectedAmount'] : '';
+    $order_id = isset($params['order_id']) ? absint($params['order_id']) : 0;
+    $network = isset($params['network']) ? sanitize_text_field(wp_unslash($params['network'])) : 'devnet';
+
+    if (empty($signature) || $expected_amount === '') {
+        return new WP_REST_Response(array(
+            'success' => false,
+            'message' => 'Missing signature or expectedAmount'
+        ), 400);
+    }
+
+    $render_url = 'https://woo-solana-payment-devnet.onrender.com/verify-devnet-payment';
+    $payload = array(
+        'signature' => $signature,
+        'expectedAmount' => $expected_amount,
+        'order_id' => $order_id,
+        'network' => $network,
+        'shopWallet' => 'AVJqhvECgwFkMQbmmTinbf4DxPco6fhzWEpzWyGi53xa',
+        'mint' => 'FKkgeZxYLxoZ1WciErXKbeNTf5CB296zv51euCR7MZN3',
+    );
+
+    // Render free tier: cold start can add 50s+ before Node handles the request.
+    // Retry once on timeout / empty response.
+    $timeout_seconds = (int) apply_filters('zoo_verify_render_timeout', 120);
+    $args = array(
+        'timeout' => $timeout_seconds,
+        'headers' => array(
+            'Content-Type' => 'application/json',
+            'Connection' => 'close',
+        ),
+        'body' => wp_json_encode($payload),
+        'sslverify' => true,
+        'httpversion' => '1.1',
+    );
+
+    $response = wp_remote_post($render_url, $args);
+
+    if (is_wp_error($response)) {
+        $err_msg = $response->get_error_message();
+        $is_timeout = (stripos($err_msg, 'timed out') !== false) || (stripos($err_msg, 'timeout') !== false) || (stripos($err_msg, '28') !== false);
+        if ($is_timeout) {
+            $args['timeout'] = max(90, min(180, (int) apply_filters('zoo_verify_render_timeout_retry', 120)));
+            $response = wp_remote_post($render_url, $args);
+        }
+    }
+
+    if (is_wp_error($response)) {
+        return new WP_REST_Response(array(
+            'success' => false,
+            'message' => 'Render request failed: ' . $response->get_error_message(),
+        ), 502);
+    }
+
+    $status = wp_remote_retrieve_response_code($response);
+    $body = wp_remote_retrieve_body($response);
+    $data = json_decode($body, true);
+
+    if (!is_array($data)) {
+        return new WP_REST_Response(array(
+            'success' => false,
+            'message' => 'Invalid Render response',
+            'render_status' => $status,
+            'render_body' => mb_substr((string) $body, 0, 1000),
+            'status_code' => $status,
+        ), 502);
+    }
+
+    // If Render returns non-2xx, still include body details for debugging.
+    if ($status < 200 || $status >= 300) {
+        if (!isset($data['render_status'])) $data['render_status'] = $status;
+        if (!isset($data['render_body'])) $data['render_body'] = mb_substr((string) $body, 0, 1000);
+        return new WP_REST_Response($data, 502);
+    }
+
+    return new WP_REST_Response($data, 200);
+}
+
 // -------------------- Enqueue Scripts --------------------
 // Important: Do NOT use @latest for Solana libraries. WordPress caching breaks them.
 add_action('wp_enqueue_scripts', function () {
@@ -83,11 +176,12 @@ add_action('wp_enqueue_scripts', function () {
     );
 
     // jQuery required: wallet-devnet uses $('form.checkout').on('checkout_place_order_zoo_devnet', ...)
+    $zoo_wallet_devnet_path = plugin_dir_path(__FILE__) . 'wallet-devnet.js';
     wp_enqueue_script(
         'zoo-wallet-devnet',
         plugin_dir_url(__FILE__) . 'wallet-devnet.js',
         ['jquery', 'solana-web3', 'solana-spl-token', 'qrcodejs'],
-        '1.0',
+        file_exists($zoo_wallet_devnet_path) ? (string) filemtime($zoo_wallet_devnet_path) : '1.0',
         true
     );
 
@@ -132,7 +226,7 @@ function zoo_enqueue_wallet_scripts_devnet() {
             'order_amount' => $order_total,
             'order_received_url' => $order_received_url,
             'api_endpoint' => 'https://woo-solana-payment-devnet.onrender.com',
-            'shop_wallet' => '6XPtpWPgFfoxRcLCwxTKXawrvzeYjviw4EYpSSLW42gc',
+            'shop_wallet' => 'AVJqhvECgwFkMQbmmTinbf4DxPco6fhzWEpzWyGi53xa',
             'rpc_url' => 'https://api.devnet.solana.com',
             'zoo_mint' => 'FKkgeZxYLxoZ1WciErXKbeNTf5CB296zv51euCR7MZN3',
             'ajax_url' => admin_url('admin-ajax.php'),
@@ -145,7 +239,7 @@ function zoo_enqueue_wallet_scripts_devnet() {
             'order_amount' => 0,
             'order_received_url' => '',
             'api_endpoint' => 'https://woo-solana-payment-devnet.onrender.com',
-            'shop_wallet' => '6XPtpWPgFfoxRcLCwxTKXawrvzeYjviw4EYpSSLW42gc',
+            'shop_wallet' => 'AVJqhvECgwFkMQbmmTinbf4DxPco6fhzWEpzWyGi53xa',
             'rpc_url' => 'https://api.devnet.solana.com',
             'zoo_mint' => 'FKkgeZxYLxoZ1WciErXKbeNTf5CB296zv51euCR7MZN3',
             'ajax_url' => admin_url('admin-ajax.php'),
@@ -220,9 +314,15 @@ function zoo_devnet_create_pending_order() {
         $order->set_status('pending');
         $order->save();
 
+        $total_str = function_exists('wc_format_decimal') && function_exists('wc_get_price_decimals')
+            ? wc_format_decimal($order->get_total(), wc_get_price_decimals())
+            : (string) $order->get_total();
+
         wp_send_json_success([
             'order_id'   => $order->get_id(),
             'order_key'  => $order->get_order_key(),
+            'total'      => $total_str,
+            'currency'   => $order->get_currency(),
             'redirect'   => $order->get_checkout_order_received_url(),
             'redirect_url' => $order->get_checkout_order_received_url(),
         ]);
