@@ -5,13 +5,13 @@ console.log('ZOO DEVNET WALLET JS LOADED');
 
   const splToken = window.splToken;
   if (!splToken) {
-    console.error('SPL Token library not loaded');
+    console.warn('[ZOO] @solana/spl-token not on window (CSP may block unpkg). Checkout still works: transfers use web3-only ix.');
   }
 
   // Devnet config (Network: https://api.devnet.solana.com)
   const DEVNET_RPC = 'https://api.devnet.solana.com';
   const ZOO_MINT = 'FKkgeZxYLxoZ1WciErXKbeNTf5CB296zv51euCR7MZN3';
-  const SHOP_WALLET = 'AVJqhvECgwFkMQbmmTinbf4DxPco6fhzWEpzWyGi53xa';
+  const SHOP_WALLET = '6XPtpWPgFfoxRcLCwxTKXawrvzeYjviw4EYpSSLW42gc';
   const VERIFY_URL = 'https://woo-solana-payment-devnet.onrender.com/verify-devnet-payment';
 
   const connectBtn = document.getElementById('connect-wallet-btn');
@@ -294,6 +294,14 @@ console.log('ZOO DEVNET WALLET JS LOADED');
       return false;
     }
     const ajax = getZooAjax();
+    const shopOwnerForGuard = String(ajax.shop_wallet || SHOP_WALLET || '').trim();
+    if (shopOwnerForGuard && publicKey === shopOwnerForGuard) {
+      const msg = 'Use a buyer wallet in Phantom — not the shop wallet. Your shop address is the receiver; paying with the same key does not work for real customers.';
+      console.warn('[ZOO]', msg);
+      showMsg(msg, true);
+      alert(msg);
+      return false;
+    }
     const amount = (amountParam != null && amountParam > 0) ? Number(amountParam) : (getOrderTotal() || parseFloat(ajax.order_amount) || 0);
     if (!amount || amount <= 0) {
       console.log('[ZOO] Invalid order amount:', amount);
@@ -398,10 +406,13 @@ console.log('ZOO DEVNET WALLET JS LOADED');
         const extra =
           (verifyData && verifyData.render_body) ? String(verifyData.render_body) :
           (verifyData && verifyData.raw_preview) ? String(verifyData.raw_preview) : '';
-        const detail =
+        let detail =
           (verifyData && (verifyData.message || verifyData.error)) ||
           extra ||
           (lastVerifyText ? ('HTTP ' + lastVerifyStatus + ': ' + lastVerifyText.slice(0, 240)) : ('HTTP ' + lastVerifyStatus));
+        if (verifyData && verifyData.success === false && !verifyData.message && !verifyData.error) {
+          detail = 'Verifier returned {"success":false} with no details. Your Render service is not running the current server.js. Deploy woo-solana-payment-devnet from GitHub, then open https://woo-solana-payment-devnet.onrender.com/api-meta — you should see JSON with "version":2 (404 = old deploy).';
+        }
         throw new Error(detail || 'Verification failed');
       }
 

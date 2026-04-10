@@ -85,7 +85,7 @@ function zoo_verify_render_proxy($request) {
         'expectedAmount' => $expected_amount,
         'order_id' => $order_id,
         'network' => $network,
-        'shopWallet' => 'AVJqhvECgwFkMQbmmTinbf4DxPco6fhzWEpzWyGi53xa',
+        'shopWallet' => '6XPtpWPgFfoxRcLCwxTKXawrvzeYjviw4EYpSSLW42gc',
         'mint' => 'FKkgeZxYLxoZ1WciErXKbeNTf5CB296zv51euCR7MZN3',
     );
 
@@ -226,7 +226,7 @@ function zoo_enqueue_wallet_scripts_devnet() {
             'order_amount' => $order_total,
             'order_received_url' => $order_received_url,
             'api_endpoint' => 'https://woo-solana-payment-devnet.onrender.com',
-            'shop_wallet' => 'AVJqhvECgwFkMQbmmTinbf4DxPco6fhzWEpzWyGi53xa',
+            'shop_wallet' => '6XPtpWPgFfoxRcLCwxTKXawrvzeYjviw4EYpSSLW42gc',
             'rpc_url' => 'https://api.devnet.solana.com',
             'zoo_mint' => 'FKkgeZxYLxoZ1WciErXKbeNTf5CB296zv51euCR7MZN3',
             'ajax_url' => admin_url('admin-ajax.php'),
@@ -239,7 +239,7 @@ function zoo_enqueue_wallet_scripts_devnet() {
             'order_amount' => 0,
             'order_received_url' => '',
             'api_endpoint' => 'https://woo-solana-payment-devnet.onrender.com',
-            'shop_wallet' => 'AVJqhvECgwFkMQbmmTinbf4DxPco6fhzWEpzWyGi53xa',
+            'shop_wallet' => '6XPtpWPgFfoxRcLCwxTKXawrvzeYjviw4EYpSSLW42gc',
             'rpc_url' => 'https://api.devnet.solana.com',
             'zoo_mint' => 'FKkgeZxYLxoZ1WciErXKbeNTf5CB296zv51euCR7MZN3',
             'ajax_url' => admin_url('admin-ajax.php'),
