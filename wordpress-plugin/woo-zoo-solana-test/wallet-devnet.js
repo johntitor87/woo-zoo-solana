@@ -1,4 +1,4 @@
-console.log('ZOO DEVNET WALLET JS LOADED');
+console.log('ZOO Solana wallet JS loaded');
 
 (function () {
   'use strict';
@@ -8,11 +8,44 @@ console.log('ZOO DEVNET WALLET JS LOADED');
     console.warn('[ZOO] @solana/spl-token not on window (CSP may block unpkg). Checkout still works: transfers use web3-only ix.');
   }
 
-  // Devnet config (Network: https://api.devnet.solana.com)
-  const DEVNET_RPC = 'https://api.devnet.solana.com';
-  const ZOO_MINT = 'FKkgeZxYLxoZ1WciErXKbeNTf5CB296zv51euCR7MZN3';
-  const SHOP_WALLET = '6XPtpWPgFfoxRcLCwxTKXawrvzeYjviw4EYpSSLW42gc';
-  const VERIFY_URL = 'https://woo-solana-payment-devnet.onrender.com/verify-devnet-payment';
+  // Defaults match wp_localize_script (mainnet); zoo_ajax overrides when present.
+  const DEFAULT_RPC = 'https://api.mainnet-beta.solana.com';
+  const ZOO_MINT = 'zoofwvSp4VepYrNBhUUcuGbkhYyqgrS2NhAMYniQZeA';
+  const SHOP_WALLET = 'F6FSKFnryX4g8kDeapfXRJ4KRJ7F9oTFUih1QbQ7gktA';
+
+  function getRpcUrl() {
+    const u = String(getZooAjax().rpc_url || '').trim();
+    return u || DEFAULT_RPC;
+  }
+
+  function getZooMintStr() {
+    const m = String(getZooAjax().zoo_mint || '').trim();
+    return m || ZOO_MINT;
+  }
+
+  function getShopWalletStr() {
+    const s = String(getZooAjax().shop_wallet || '').trim();
+    return s || SHOP_WALLET;
+  }
+
+  function getSolanaNetwork() {
+    const n = String(getZooAjax().solana_network || '').trim();
+    return n || 'mainnet-beta';
+  }
+
+  /** WooCommerce leaves the form “processing” / disables #place_order after Place order; unlock when our async flow ends. */
+  let zooPayInFlight = false;
+  function zooUnlockCheckoutUi() {
+    if (typeof jQuery === 'undefined') return;
+    const $form = jQuery('form.checkout');
+    $form.removeClass('processing');
+    try {
+      if (typeof $form.unblock === 'function') {
+        $form.unblock();
+      }
+    } catch (e) { /* ignore */ }
+    jQuery('#place_order').prop('disabled', false).removeClass('disabled');
+  }
 
   const connectBtn = document.getElementById('connect-wallet-btn');
   const msgSpan = document.getElementById('zoo-wallet-msg') || document.getElementById('zoo-header-wallet-msg');
@@ -30,8 +63,8 @@ console.log('ZOO DEVNET WALLET JS LOADED');
   }
 
   function generateSolanaPayQR(amount) {
-    const merchantWallet = SHOP_WALLET;
-    const mint = ZOO_MINT;
+    const merchantWallet = getShopWalletStr();
+    const mint = getZooMintStr();
     const solanaWeb3 = window.solanaWeb3;
     if (!solanaWeb3) return;
     const reference = solanaWeb3.Keypair.generate().publicKey.toString();
@@ -83,15 +116,9 @@ console.log('ZOO DEVNET WALLET JS LOADED');
     const solanaWeb3 = window.solanaWeb3;
     if (!solanaWeb3) return;
 
-    const connection =
-      new solanaWeb3.Connection(
-        solanaWeb3.clusterApiUrl('devnet')
-      );
+    const connection = new solanaWeb3.Connection(getRpcUrl(), 'confirmed');
 
-    const mint =
-      new solanaWeb3.PublicKey(
-        'FKkgeZxYLxoZ1WciErXKbeNTf5CB296zv51euCR7MZN3'
-      );
+    const mint = new solanaWeb3.PublicKey(getZooMintStr());
 
     const accounts =
       await connection.getParsedTokenAccountsByOwner(
@@ -214,10 +241,10 @@ console.log('ZOO DEVNET WALLET JS LOADED');
       throw new Error('Phantom does not support signAndSendTransaction');
     }
 
-    const connection = new solanaWeb3.Connection(solanaWeb3.clusterApiUrl('devnet'), 'confirmed');
+    const connection = new solanaWeb3.Connection(getRpcUrl(), 'confirmed');
     const fromPubKey = new solanaWeb3.PublicKey(publicKey);
-    const toPubKey = new solanaWeb3.PublicKey(SHOP_WALLET);
-    const mintPubKey = new solanaWeb3.PublicKey(ZOO_MINT);
+    const toPubKey = new solanaWeb3.PublicKey(getShopWalletStr());
+    const mintPubKey = new solanaWeb3.PublicKey(getZooMintStr());
     const TOKEN_PROGRAM_ID = new solanaWeb3.PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
 
     const fromTokens = await connection.getTokenAccountsByOwner(fromPubKey, { mint: mintPubKey });
@@ -280,6 +307,12 @@ console.log('ZOO DEVNET WALLET JS LOADED');
   };
 
   async function payWithZoo(amountParam) {
+    if (zooPayInFlight) {
+      console.log('[ZOO] Payment already in progress');
+      return false;
+    }
+    zooPayInFlight = true;
+    try {
     console.log('[ZOO] Attempting payment...');
     if (!isPhantomInstalled()) {
       console.log('[ZOO] Phantom not installed');
@@ -294,7 +327,7 @@ console.log('ZOO DEVNET WALLET JS LOADED');
       return false;
     }
     const ajax = getZooAjax();
-    const shopOwnerForGuard = String(ajax.shop_wallet || SHOP_WALLET || '').trim();
+    const shopOwnerForGuard = String(ajax.shop_wallet || getShopWalletStr() || '').trim();
     if (shopOwnerForGuard && publicKey === shopOwnerForGuard) {
       const msg = 'Use a buyer wallet in Phantom — not the shop wallet. Your shop address is the receiver; paying with the same key does not work for real customers.';
       console.warn('[ZOO]', msg);
@@ -347,7 +380,7 @@ console.log('ZOO DEVNET WALLET JS LOADED');
         signature: txSignature,
         order_id: orderId,
         expectedAmount: serverTotalStr,
-        network: 'devnet'
+        network: getSolanaNetwork()
       };
       console.log('[ZOO] Verifying payment...', verifyPayload);
       let verifyData = null;
@@ -430,6 +463,10 @@ console.log('ZOO DEVNET WALLET JS LOADED');
       return false;
     }
     return true;
+    } finally {
+      zooPayInFlight = false;
+      zooUnlockCheckoutUi();
+    }
   }
 
   function checkoutWithZoo() {
@@ -458,12 +495,21 @@ console.log('ZOO DEVNET WALLET JS LOADED');
   }
 
   document.addEventListener('DOMContentLoaded', function () {
-    // Place Order with zoo_devnet → Phantom opens immediately (blocks default checkout)
+    // Place Order with selected ZOO gateway id (keep legacy zoo_devnet hook for compatibility)
     if (typeof jQuery !== 'undefined') {
       jQuery(function ($) {
-        $('form.checkout').on('checkout_place_order_zoo_devnet', function () {
-          payWithZoo();
-          return false;
+        const ajax = getZooAjax();
+        const activeGatewayId = String(ajax.gateway_id || 'zoo_devnet');
+        const legacyGatewayId = String(ajax.legacy_gateway_id || 'zoo_devnet');
+        const eventNames = [`checkout_place_order_${activeGatewayId}`];
+        if (legacyGatewayId && legacyGatewayId !== activeGatewayId) {
+          eventNames.push(`checkout_place_order_${legacyGatewayId}`);
+        }
+        eventNames.forEach(function (eventName) {
+          $('form.checkout').on(eventName, function () {
+            payWithZoo();
+            return false;
+          });
         });
       });
     }

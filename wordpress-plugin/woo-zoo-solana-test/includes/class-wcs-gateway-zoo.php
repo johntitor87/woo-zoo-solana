@@ -50,7 +50,7 @@ class WC_Gateway_ZOO extends WC_Payment_Gateway {
                 'title'       => 'ZOO Token Mint',
                 'type'        => 'text',
                 'description' => 'ZOO token mint address (9 decimals). Default is the official ZOO mint.',
-                'default'     => 'FKkgeZxYLxoZ1WciErXKbeNTf5CB296zv51euCR7MZN3',
+                'default'     => 'zoofwvSp4VepYrNBhUUcuGbkhYyqgrS2NhAMYniQZeA',
             ],
             'shop_wallet' => [
                 'title'       => 'Shop Wallet (YOUR_ZOO_WALLET_PUBLIC_KEY)',

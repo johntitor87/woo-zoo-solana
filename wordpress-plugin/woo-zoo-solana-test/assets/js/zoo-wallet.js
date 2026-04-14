@@ -69,7 +69,7 @@
   }
 
   var TOKEN_PROGRAM_ID = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
-  var ZOO_MINT_ADDRESS = 'FKkgeZxYLxoZ1WciErXKbeNTf5CB296zv51euCR7MZN3';
+  var ZOO_MINT_ADDRESS = 'zoofwvSp4VepYrNBhUUcuGbkhYyqgrS2NhAMYniQZeA';
   var ZOO_DECIMALS = 9;
 
   function getSolana() {

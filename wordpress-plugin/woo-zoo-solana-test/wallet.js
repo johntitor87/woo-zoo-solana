@@ -10,14 +10,13 @@
   const publicKeyInput = document.getElementById('zoo_wallet_address');
 
   let publicKey = null;
-  let network = 'devnet';
+  let network = 'mainnet-beta';
 
-  // Test ZOO token mint address (devnet)
-  const ZOO_MINT_ADDRESS = 'FKkgeZxYLxoZ1WciErXKbeNTf5CB296zv51euCR7MZN3';
+  const ZOO_MINT_ADDRESS = 'zoofwvSp4VepYrNBhUUcuGbkhYyqgrS2NhAMYniQZeA';
 
   function getConnection() {
     if (!window.solanaWeb3) return null;
-    return new window.solanaWeb3.Connection('https://api.devnet.solana.com', 'confirmed');
+    return new window.solanaWeb3.Connection('https://api.mainnet-beta.solana.com', 'confirmed');
   }
 
   let zooBalance = 0;

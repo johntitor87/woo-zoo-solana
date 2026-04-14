@@ -1,0 +1,5 @@
+// ZOO Solana checkout — paste these lines in wp-config.php ABOVE:
+// /* That's all, stop editing! Happy publishing. */
+// Replace YOUR_KEY_HERE with your Helius API key.
+
+define('ZOO_SOLANA_RPC_URL', 'https://mainnet.helius-rpc.com/?api-key=YOUR_KEY_HERE');

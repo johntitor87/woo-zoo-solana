@@ -3,38 +3,32 @@
     "productId": "product-123",
     "burnAmount": 10,
     "isActive": true,
-    "mintAddress": "FKkgeZxYLxoZ1WciErXKbeNTf5CB296zv51euCR7MZN3",
-    "network": "devnet",
+    "mintAddress": "zoofwvSp4VepYrNBhUUcuGbkhYyqgrS2NhAMYniQZeA",
+    "network": "mainnet",
     "description": "Basic product - burns 10 ZOO tokens"
   },
   "product-456": {
     "productId": "product-456",
     "burnAmount": 50,
     "isActive": true,
-    "mintAddress": "FKkgeZxYLxoZ1WciErXKbeNTf5CB296zv51euCR7MZN3",
-    "network": "devnet",
+    "mintAddress": "zoofwvSp4VepYrNBhUUcuGbkhYyqgrS2NhAMYniQZeA",
+    "network": "mainnet",
     "description": "Premium product - burns 50 ZOO tokens"
   },
   "premium-access": {
     "productId": "premium-access",
     "burnAmount": 100,
     "isActive": true,
-    "mintAddress": "FKkgeZxYLxoZ1WciErXKbeNTf5CB296zv51euCR7MZN3",
-    "network": "devnet",
+    "mintAddress": "zoofwvSp4VepYrNBhUUcuGbkhYyqgrS2NhAMYniQZeA",
+    "network": "mainnet",
     "description": "Premium access - burns 100 ZOO tokens"
   },
   "nft-unlock": {
     "productId": "nft-unlock",
     "burnAmount": 200,
     "isActive": true,
-    "mintAddress": "FKkgeZxYLxoZ1WciErXKbeNTf5CB296zv51euCR7MZN3",
-    "network": "devnet",
+    "mintAddress": "zoofwvSp4VepYrNBhUUcuGbkhYyqgrS2NhAMYniQZeA",
+    "network": "mainnet",
     "description": "Unlock NFT - burns 200 ZOO tokens"
   }
 }
-
-
-
-
-
-

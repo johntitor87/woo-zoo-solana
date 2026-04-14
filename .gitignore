@@ -7,6 +7,8 @@ twitter_session.json
 # Solana keys and token info
 solana-keypair.json
 token-*.json
+zoo-vanity-mint.json
+*-vanity-mint.json
 
 # Dependencies
 node_modules/

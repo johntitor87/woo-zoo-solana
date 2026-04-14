@@ -1,12 +1,45 @@
 <?php
 /**
- * Plugin Name: Woo ZOO Solana Devnet
- * Description: Test version for ZOO Token on devnet. Flashy degen wallet pill, Phantom integration, animations.
- * Version: 1.0
+ * Plugin Name: Woo ZOO Solana
+ * Description: ZOO SPL checkout on Solana mainnet (vanity mint). Phantom, wallet pill, Render verifier.
+ * Version: 1.2.0
  * Author: Your Name
  */
 
 if (!defined('ABSPATH')) exit;
+
+/**
+ * RPC used by Phantom/checkout JS. The public mainnet endpoint often returns 403 from browsers (rate limits).
+ * Set in wp-config.php: define('ZOO_SOLANA_RPC_URL', 'https://mainnet.helius-rpc.com/?api-key=YOUR_KEY');
+ * Or filter: add_filter('zoo_solana_rpc_url', fn() => 'https://...');
+ */
+function zoo_get_solana_rpc_url() {
+    if (defined('ZOO_SOLANA_RPC_URL') && is_string(constant('ZOO_SOLANA_RPC_URL')) && constant('ZOO_SOLANA_RPC_URL') !== '') {
+        return constant('ZOO_SOLANA_RPC_URL');
+    }
+    return apply_filters('zoo_solana_rpc_url', 'https://api.mainnet-beta.solana.com');
+}
+
+
+/**
+ * Internal gateway id. Keep default as legacy `zoo_devnet` for backward compatibility
+ * with existing Woo settings, hooks, and historical orders.
+ */
+function zoo_mainnet_gateway_id() {
+    return apply_filters('zoo_mainnet_gateway_id', 'zoo_devnet');
+}
+
+function zoo_mainnet_legacy_gateway_id() {
+    return 'zoo_devnet';
+}
+
+function zoo_is_mainnet_gateway_order($order) {
+    if (!$order || !method_exists($order, 'get_payment_method')) {
+        return false;
+    }
+    $pm = (string) $order->get_payment_method();
+    return $pm === zoo_mainnet_gateway_id() || $pm === zoo_mainnet_legacy_gateway_id();
+}
 
 // -------------------- REST: verify payment + update Woo order --------------------
 // Allows an external verification service to mark the Woo order as paid.
@@ -70,7 +103,7 @@ function zoo_verify_render_proxy($request) {
     $signature = isset($params['signature']) ? sanitize_text_field(wp_unslash($params['signature'])) : '';
     $expected_amount = isset($params['expectedAmount']) ? (string) $params['expectedAmount'] : '';
     $order_id = isset($params['order_id']) ? absint($params['order_id']) : 0;
-    $network = isset($params['network']) ? sanitize_text_field(wp_unslash($params['network'])) : 'devnet';
+    $network = isset($params['network']) ? sanitize_text_field(wp_unslash($params['network'])) : 'mainnet-beta';
 
     if (empty($signature) || $expected_amount === '') {
         return new WP_REST_Response(array(
@@ -85,8 +118,8 @@ function zoo_verify_render_proxy($request) {
         'expectedAmount' => $expected_amount,
         'order_id' => $order_id,
         'network' => $network,
-        'shopWallet' => '6XPtpWPgFfoxRcLCwxTKXawrvzeYjviw4EYpSSLW42gc',
-        'mint' => 'FKkgeZxYLxoZ1WciErXKbeNTf5CB296zv51euCR7MZN3',
+        'shopWallet' => 'F6FSKFnryX4g8kDeapfXRJ4KRJ7F9oTFUih1QbQ7gktA',
+        'mint' => 'zoofwvSp4VepYrNBhUUcuGbkhYyqgrS2NhAMYniQZeA',
     );
 
     // Render free tier: cold start can add 50s+ before Node handles the request.
@@ -142,6 +175,20 @@ function zoo_verify_render_proxy($request) {
         return new WP_REST_Response($data, 502);
     }
 
+    // Mark Woo order paid here (server-side) so we do not rely on a second browser request
+    // to /verify-payment — security plugins and race conditions often block that hop.
+    if (!empty($data['success']) && $order_id > 0 && $signature !== '' && function_exists('wc_get_order')) {
+        $order = wc_get_order($order_id);
+        if ($order && zoo_is_mainnet_gateway_order($order)) {
+            $st = $order->get_status();
+            if ($st === 'pending' || $st === 'on-hold') {
+                $order->payment_complete($signature);
+                $order->add_order_note('ZOO payment verified via Render. TX: ' . $signature);
+                $order->save();
+            }
+        }
+    }
+
     return new WP_REST_Response($data, 200);
 }
 
@@ -175,20 +222,20 @@ add_action('wp_enqueue_scripts', function () {
         true
     );
 
-    // jQuery required: wallet-devnet uses $('form.checkout').on('checkout_place_order_zoo_devnet', ...)
-    $zoo_wallet_devnet_path = plugin_dir_path(__FILE__) . 'wallet-devnet.js';
+    // jQuery required: wallet-mainnet binds checkout_place_order_<gateway_id> handlers
+    $zoo_wallet_mainnet_path = plugin_dir_path(__FILE__) . 'wallet-devnet.js';
     wp_enqueue_script(
-        'zoo-wallet-devnet',
+        'zoo-wallet-mainnet',
         plugin_dir_url(__FILE__) . 'wallet-devnet.js',
         ['jquery', 'solana-web3', 'solana-spl-token', 'qrcodejs'],
-        file_exists($zoo_wallet_devnet_path) ? (string) filemtime($zoo_wallet_devnet_path) : '1.0',
+        file_exists($zoo_wallet_mainnet_path) ? (string) filemtime($zoo_wallet_mainnet_path) : '1.0',
         true
     );
 
 }, 5);
 
-add_action('wp_enqueue_scripts', 'zoo_enqueue_wallet_scripts_devnet');
-function zoo_enqueue_wallet_scripts_devnet() {
+add_action('wp_enqueue_scripts', 'zoo_enqueue_wallet_scripts_mainnet');
+function zoo_enqueue_wallet_scripts_mainnet() {
     if (is_admin()) return;
 
     // Hide other wallet UI
@@ -208,7 +255,7 @@ function zoo_enqueue_wallet_scripts_devnet() {
 @keyframes shake{0%,100%{transform:translateX(0);}20%,60%{transform:translateX(-5px);}40%,80%{transform:translateX(5px);}}
 @keyframes confirmFlash{0%{box-shadow:0 0 0px lime;}50%{box-shadow:0 0 15px lime;}100%{box-shadow:0 0 0px lime;}}');
 
-    // solana-web3 and zoo-wallet-js-devnet enqueued in earlier hook (every page)
+    // solana-web3 and zoo-wallet-js-mainnet enqueued in earlier hook (every page)
     // Localize for checkout
     if (function_exists('is_checkout') && is_checkout() && function_exists('WC') && WC()) {
         $order_total = 0;
@@ -221,27 +268,33 @@ function zoo_enqueue_wallet_scripts_devnet() {
             $order_received_url = $order ? $order->get_checkout_order_received_url() : '';
         }
 
-        wp_localize_script('zoo-wallet-devnet', 'zoo_ajax', [
+        wp_localize_script('zoo-wallet-mainnet', 'zoo_ajax', [
             'order_id' => $order_id,
             'order_amount' => $order_total,
             'order_received_url' => $order_received_url,
             'api_endpoint' => 'https://woo-solana-payment-devnet.onrender.com',
-            'shop_wallet' => '6XPtpWPgFfoxRcLCwxTKXawrvzeYjviw4EYpSSLW42gc',
-            'rpc_url' => 'https://api.devnet.solana.com',
-            'zoo_mint' => 'FKkgeZxYLxoZ1WciErXKbeNTf5CB296zv51euCR7MZN3',
+            'shop_wallet' => 'F6FSKFnryX4g8kDeapfXRJ4KRJ7F9oTFUih1QbQ7gktA',
+            'rpc_url' => zoo_get_solana_rpc_url(),
+            'solana_network' => 'mainnet-beta',
+            'gateway_id' => zoo_mainnet_gateway_id(),
+            'legacy_gateway_id' => zoo_mainnet_legacy_gateway_id(),
+            'zoo_mint' => 'zoofwvSp4VepYrNBhUUcuGbkhYyqgrS2NhAMYniQZeA',
             'ajax_url' => admin_url('admin-ajax.php'),
             'create_order_nonce' => wp_create_nonce('zoo_create_pending_order'),
             'decimals' => 9,
         ]);
     } else {
-        wp_localize_script('zoo-wallet-devnet', 'zoo_ajax', [
+        wp_localize_script('zoo-wallet-mainnet', 'zoo_ajax', [
             'order_id' => 0,
             'order_amount' => 0,
             'order_received_url' => '',
             'api_endpoint' => 'https://woo-solana-payment-devnet.onrender.com',
-            'shop_wallet' => '6XPtpWPgFfoxRcLCwxTKXawrvzeYjviw4EYpSSLW42gc',
-            'rpc_url' => 'https://api.devnet.solana.com',
-            'zoo_mint' => 'FKkgeZxYLxoZ1WciErXKbeNTf5CB296zv51euCR7MZN3',
+            'shop_wallet' => 'F6FSKFnryX4g8kDeapfXRJ4KRJ7F9oTFUih1QbQ7gktA',
+            'rpc_url' => zoo_get_solana_rpc_url(),
+            'solana_network' => 'mainnet-beta',
+            'gateway_id' => zoo_mainnet_gateway_id(),
+            'legacy_gateway_id' => zoo_mainnet_legacy_gateway_id(),
+            'zoo_mint' => 'zoofwvSp4VepYrNBhUUcuGbkhYyqgrS2NhAMYniQZeA',
             'ajax_url' => admin_url('admin-ajax.php'),
             'create_order_nonce' => '',
             'decimals' => 9,
@@ -285,9 +338,9 @@ add_action('wp_enqueue_scripts', function () {
 }, 15);
 
 // -------------------- Create pending order (cron-based flow: order first, then TX, then server cron completes) --------------------
-add_action('wp_ajax_zoo_create_pending_order', 'zoo_devnet_create_pending_order');
-add_action('wp_ajax_nopriv_zoo_create_pending_order', 'zoo_devnet_create_pending_order');
-function zoo_devnet_create_pending_order() {
+add_action('wp_ajax_zoo_create_pending_order', 'zoo_mainnet_create_pending_order');
+add_action('wp_ajax_nopriv_zoo_create_pending_order', 'zoo_mainnet_create_pending_order');
+function zoo_mainnet_create_pending_order() {
     if (!isset($_POST['nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['nonce'])), 'zoo_create_pending_order')) {
         wp_send_json_error(['message' => 'Invalid nonce']);
     }
@@ -300,8 +353,8 @@ function zoo_devnet_create_pending_order() {
     }
     try {
         $order = wc_create_order();
-        $order->set_payment_method('zoo_devnet');
-        $order->set_payment_method_title('ZOO Token (Devnet)');
+        $order->set_payment_method(zoo_mainnet_gateway_id());
+        $order->set_payment_method_title('ZOO Token (Mainnet)');
         foreach (WC()->cart->get_cart() as $cart_item) {
             $order->add_product($cart_item['data'], $cart_item['quantity'], $cart_item);
         }
@@ -332,9 +385,9 @@ function zoo_devnet_create_pending_order() {
 }
 
 // -------------------- Verify payment (JS sends order_id + tx after Phantom payment) --------------------
-add_action('wp_ajax_zoo_verify_payment', 'zoo_devnet_verify_payment');
-add_action('wp_ajax_nopriv_zoo_verify_payment', 'zoo_devnet_verify_payment');
-function zoo_devnet_verify_payment() {
+add_action('wp_ajax_zoo_verify_payment', 'zoo_mainnet_verify_payment');
+add_action('wp_ajax_nopriv_zoo_verify_payment', 'zoo_mainnet_verify_payment');
+function zoo_mainnet_verify_payment() {
     $order_id = isset($_POST['order_id']) ? absint($_POST['order_id']) : 0;
     $tx = isset($_POST['tx']) ? sanitize_text_field(wp_unslash($_POST['tx'])) : (isset($_POST['tx_signature']) ? sanitize_text_field(wp_unslash($_POST['tx_signature'])) : '');
 
@@ -346,7 +399,7 @@ function zoo_devnet_verify_payment() {
     if (!$order) {
         wp_send_json_error(['message' => 'Order not found']);
     }
-    if ($order->get_payment_method() !== 'zoo_devnet') {
+    if (!zoo_is_mainnet_gateway_order($order)) {
         wp_send_json_error(['message' => 'Invalid payment method']);
     }
     if (!$order->has_status('pending')) {
@@ -362,9 +415,9 @@ function zoo_devnet_verify_payment() {
 }
 
 // -------------------- Cron confirmation: server calls this after on-chain verification --------------------
-add_action('wp_ajax_wcs_confirm_zoo_payment', 'zoo_devnet_ajax_confirm_payment');
-add_action('wp_ajax_nopriv_wcs_confirm_zoo_payment', 'zoo_devnet_ajax_confirm_payment');
-function zoo_devnet_ajax_confirm_payment() {
+add_action('wp_ajax_wcs_confirm_zoo_payment', 'zoo_mainnet_ajax_confirm_payment');
+add_action('wp_ajax_nopriv_wcs_confirm_zoo_payment', 'zoo_mainnet_ajax_confirm_payment');
+function zoo_mainnet_ajax_confirm_payment() {
     $order_id = isset($_POST['order_id']) ? absint($_POST['order_id']) : 0;
     $tx_signature = isset($_POST['tx_signature']) ? sanitize_text_field(wp_unslash($_POST['tx_signature'])) : '';
 
@@ -376,7 +429,7 @@ function zoo_devnet_ajax_confirm_payment() {
     if (!$order) {
         wp_send_json_error(['message' => 'Order not found']);
     }
-    if ($order->get_payment_method() !== 'zoo_devnet') {
+    if (!zoo_is_mainnet_gateway_order($order)) {
         wp_send_json_error(['message' => 'Invalid payment method']);
     }
     if (!$order->has_status('pending')) {
@@ -404,8 +457,8 @@ add_action('woocommerce_checkout_update_order_meta', function ($order_id) {
 });
 
 // -------------------- Blue Degen Wallet Pill --------------------
-add_action('wp_body_open', 'zoo_add_connect_wallet_button_devnet');
-function zoo_add_connect_wallet_button_devnet() {
+add_action('wp_body_open', 'zoo_add_connect_wallet_button_mainnet');
+function zoo_add_connect_wallet_button_mainnet() {
     if (is_admin()) return;
     ?>
     <div id="zoo-wallet-header" style="position:fixed; top:10px; right:10px; z-index:9999;">
@@ -422,19 +475,19 @@ function zoo_add_connect_wallet_button_devnet() {
 
 // -------------------- WooCommerce Gateway --------------------
 add_filter('woocommerce_payment_gateways', function ($gateways) {
-    $gateways[] = 'WC_Gateway_Zoo_Devnet';
+    $gateways[] = 'WC_Gateway_Zoo_Mainnet';
     return $gateways;
 });
 
 add_action('plugins_loaded', function () {
     if (!class_exists('WC_Payment_Gateway')) return;
 
-    class WC_Gateway_Zoo_Devnet extends WC_Payment_Gateway {
+    class WC_Gateway_Zoo_Mainnet extends WC_Payment_Gateway {
 
         public function __construct() {
-            $this->id = 'zoo_devnet';
-            $this->method_title = 'ZOO Token (Devnet)';
-            $this->method_description = 'Pay with ZOO Token on Solana Devnet.';
+            $this->id = zoo_mainnet_gateway_id();
+            $this->method_title = 'ZOO Token (Solana mainnet)';
+            $this->method_description = 'Pay with ZOO SPL token on Solana mainnet (Phantom).';
             $this->has_fields = true;
 
             $this->init_form_fields();
@@ -454,14 +507,14 @@ add_action('plugins_loaded', function () {
                 'enabled' => [
                     'title'   => 'Enable/Disable',
                     'type'    => 'checkbox',
-                    'label'   => 'Enable ZOO Token (Devnet)',
+                    'label'   => 'Enable ZOO Token (mainnet)',
                     'default' => 'yes'
                 ],
                 'title' => [
                     'title'       => 'Title',
                     'type'        => 'text',
                     'description' => 'Title shown at checkout',
-                    'default'     => 'ZOO Token (Devnet)'
+                    'default'     => 'ZOO Token'
                 ]
             ];
         }
@@ -488,4 +541,19 @@ add_action('plugins_loaded', function () {
             ];
         }
     }
+    if (!class_exists('WC_Gateway_Zoo_Devnet', false)) {
+        class_alias('WC_Gateway_Zoo_Mainnet', 'WC_Gateway_Zoo_Devnet');
+    }
 });
+
+/** Checkout label: replace old saved titles that still say “Devnet”. */
+add_filter('woocommerce_gateway_title', function ($title, $gateway_id) {
+    $activeId = zoo_mainnet_gateway_id();
+    if (($gateway_id !== $activeId && $gateway_id !== zoo_mainnet_legacy_gateway_id()) || !is_string($title)) {
+        return $title;
+    }
+    if (stripos($title, 'devnet') !== false) {
+        return 'ZOO Token';
+    }
+    return $title;
+}, 10, 2);
